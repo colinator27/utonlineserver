@@ -16,6 +16,7 @@ public class GameServer
     private static final boolean DISALLOW_SAME_IP = false;
     private static final int MAX_PLAYERS = 10;
     private static final boolean TESTING = false;
+    private static final boolean KICK_BAD_MOVEMENT = false;
 
     private static List<Integer> usedPorts = new ArrayList<Integer>();
 
@@ -126,6 +127,17 @@ public class GameServer
             sendKickMessagePacket(inPacket, send, message);
     }
 
+    private void resetPlayer(GamePlayer player, DatagramPacket inPacket, byte[] send)
+    {
+        ByteBuffer bbw = ByteBuffer.wrap(send);
+        bbw.order(ByteOrder.LITTLE_ENDIAN);
+
+        bbw.putFloat(5, player.x);
+        bbw.putFloat(5 + 4, player.y);
+
+        sendPacket(inPacket, send, (byte)254, 4 + 4);
+    }
+
     private boolean validatePlayerVisuals(UUID uuid, GamePlayer player, DatagramPacket inPacket, byte[] send, long now, int spriteIndex, int imageIndex, float x, float y)
     {
         if (!TESTING)
@@ -142,12 +154,19 @@ public class GameServer
         if (player.lastMovePacketTime != -1)
         {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
-            if (Math.abs(x - player.x) > elapsedFrames * 5f ||
-                Math.abs(y - player.y) > elapsedFrames * 5f)
+            if (Math.abs(x - player.x) > elapsedFrames * 6f ||
+                Math.abs(y - player.y) > elapsedFrames * 6f)
             {
-                LOG.logger.info("Player ID " + player.id + " from " + inPacket.getAddress().toString() + " kicked for invalid movement");
-                kickPlayer(uuid, player, inPacket, send, "Kicked for invalid movement (may be a bug)", true);
-                return false;
+                if (KICK_BAD_MOVEMENT)
+                {
+                    LOG.logger.info("Player ID " + player.id + " from " + inPacket.getAddress().toString() + " kicked for invalid movement");
+                    kickPlayer(uuid, player, inPacket, send, "Kicked for invalid movement (may be a bug)", true);
+                    return false;
+                } else
+                {
+                    resetPlayer(player, inPacket, send);
+                    return true;
+                }
             }
         }
 
@@ -413,8 +432,8 @@ public class GameServer
                             bbw.putLong(5, now);
                             bbw.putInt(5 + 8, p.room);
                             bbw.putInt(5 + 8 + 4, p.id);
-                            bbw.putShort(5 + 8 + 4 + 4, (short) p.spriteIndex);
-                            bbw.putShort(5 + 8 + 4 + 4 + 2, (short) p.imageIndex);
+                            bbw.putShort(5 + 8 + 4 + 4, (short)p.spriteIndex);
+                            bbw.putShort(5 + 8 + 4 + 4 + 2, (short)p.imageIndex);
                             bbw.putFloat(5 + 8 + 4 + 4 + 2 + 2, p.x);
                             bbw.putFloat(5 + 8 + 4 + 4 + 2 + 2 + 4, p.y);
                             for (GamePlayer other : rooms.get(p.room))
