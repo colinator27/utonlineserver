@@ -202,7 +202,7 @@ public class GameServer
             long now = System.currentTimeMillis();
 
             // Switch to a new log every hour
-            if (now - LOG.lastInstantiation >= 1*60*1000)
+            if (now - LOG.lastInstantiation >= 60*60*1000)
                 LOG.instantiateLogger();
 
             if (DISALLOW_SAME_IP)
