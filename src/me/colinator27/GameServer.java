@@ -3,32 +3,45 @@ package me.colinator27;
 import javafx.util.Pair;
 
 import java.io.IOException;
-import java.lang.reflect.Array;
 import java.net.*;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.charset.Charset;
 import java.util.*;
 import java.util.logging.Level;
 
+/**
+ * Class to handle connections for a specific port on a separate thread
+ */
 public class GameServer
 {
-    private static final boolean DISALLOW_SAME_IP = false;
-    private static final int MAX_PLAYERS = 10;
-    private static final boolean TESTING = false;
-    private static final boolean KICK_BAD_MOVEMENT = false;
+    public final ServerProperties properties;
 
-    private static List<Integer> usedPorts = new ArrayList<Integer>();
+    private static List<Integer> usedPorts = new ArrayList<>();
 
     private Log LOG;
     private volatile boolean running;
     private DatagramSocket socket;
     private Thread thread;
 
+    /**
+     * The currently-occupied IDs of players
+     */
     private HashSet<Integer> playerIDs;
+
+    /**
+     * The currently-connected addresses
+     * Only populated if properties.disallowSameIP is true
+     */
     private HashMap<InetAddress, Pair<Long, UUID>> connectionsIP;
+
+    /**
+     * The currently-connected sessions
+     */
     private HashMap<UUID, GamePlayer> sessions;
 
+    /**
+     * The players in every room in the game
+     */
     private List<List<GamePlayer>> rooms;
 
     public boolean isRunning()
@@ -36,24 +49,34 @@ public class GameServer
         return running;
     }
 
+    /**
+     * Routine to stop this server
+     */
     public void stop()
     {
         LOG.logger.info("Shutting down");
         running = false;
     }
 
-    public GameServer(int port)
+    /**
+     * Initialize a new server with properties
+     * @param properties    the properties to use
+     */
+    public GameServer(ServerProperties properties)
     {
-        if (usedPorts.contains(port))
+        this.properties = properties;
+
+        if (usedPorts.contains(properties.port))
             return;
         else
-            usedPorts.add(port);
-        LOG = new Log("s" + port);
-        LOG.logger.info("Server opening on port " + port);
+            usedPorts.add(properties.port);
+        LOG = new Log("s" + properties.port);
+        LOG.logger.info("Server opening on port " + properties.port);
 
+        // Initialize socket
         try
         {
-            socket = new DatagramSocket(port);
+            socket = new DatagramSocket(properties.port);
         } catch (Exception e)
         {
             LOG.logger.log(Level.SEVERE, e.getMessage(), e);
@@ -64,6 +87,7 @@ public class GameServer
 
         running = true;
 
+        // Start server thread
         thread = new Thread(() ->
         {
             LOG.logger.info("In server thread");
@@ -73,10 +97,12 @@ public class GameServer
         }){{start();}};
     }
 
-    private void sendPacket(InetAddress address, int port, byte[] send, byte id, int len)
+    /**
+     * Sends a packet to an address at a port (using a PacketBuilder)
+     */
+    private void sendPacket(InetAddress address, int port, PacketBuilder pb)
     {
-        send[4] = id;
-        DatagramPacket outPacket = new DatagramPacket(send, len + 5, address, port);
+        DatagramPacket outPacket = new DatagramPacket(pb.send, pb.getSize(), address, port);
         try
         {
             socket.send(outPacket);
@@ -86,35 +112,48 @@ public class GameServer
         }
     }
 
-    private void sendPacket(DatagramPacket inPacket, byte[] send, byte id, int len)
+    /**
+     * Sends a packet response to an inbound packet (using a PacketBuilder)
+     */
+    private void sendPacket(DatagramPacket inPacket, PacketBuilder pb)
     {
-        sendPacket(inPacket.getAddress(), inPacket.getPort(), send, id, len);
+        sendPacket(inPacket.getAddress(), inPacket.getPort(), pb);
     }
 
+    /**
+     * Sends a kick message packet response to an inbound packet
+     */
     private void sendKickMessagePacket(DatagramPacket inPacket, byte[] send, String message)
     {
-        byte[] buff = message.getBytes();
-        for (int i = 0; i < buff.length; i++)
-            send[i + 5] = buff[i];
-        send[buff.length + 5] = 0;
-        sendPacket(inPacket, send, (byte)255, message.length() + 1);
+        sendPacket(inPacket, new PacketBuilder(OutboundPacketType.KICK_MESSAGE, send).addString(message));
     }
 
+    /**
+     * Handles removing a player from a room
+     * @param player    the player to remove
+     * @param send      the send buffer
+     */
     private void playerLeaveRoom(GamePlayer player, byte[] send)
     {
         List<GamePlayer> room = rooms.get(player.room);
         room.remove(player);
 
-        ByteBuffer bbw = ByteBuffer.wrap(send);
-        bbw.order(ByteOrder.LITTLE_ENDIAN);
-
-        bbw.putInt(5, player.room);
-        bbw.putInt(5 + 4, player.id);
+        PacketBuilder pb = new PacketBuilder(OutboundPacketType.PLAYER_LEAVE_ROOM, send)
+                .addInt(player.room).addInt(player.id);
 
         for (GamePlayer other : room)
-            sendPacket(other.connAddress, other.connPort, send, (byte)11, 4 + 4);
+            sendPacket(other.connAddress, other.connPort, pb);
     }
 
+    /**
+     * Handles kicking a player from the server
+     * @param uuid              the UUID of the player
+     * @param player            the player's object
+     * @param inPacket          most recent inbound packet from the player
+     * @param send              the send buffer
+     * @param message           (optional) a kick message to send to the player
+     * @param removeSession     if true, removes the session of the player directly (it should be done outside if false)
+     */
     private void kickPlayer(UUID uuid, GamePlayer player, DatagramPacket inPacket, byte[] send, String message, boolean removeSession)
     {
         if (player.room != -1)
@@ -127,20 +166,25 @@ public class GameServer
             sendKickMessagePacket(inPacket, send, message);
     }
 
+    /**
+     * Resets a player's position to their last recorded one
+     * @param player    the player to reset
+     * @param inPacket  most recent inbound packet from the player
+     * @param send      the send buffer
+     */
     private void resetPlayer(GamePlayer player, DatagramPacket inPacket, byte[] send)
     {
-        ByteBuffer bbw = ByteBuffer.wrap(send);
-        bbw.order(ByteOrder.LITTLE_ENDIAN);
-
-        bbw.putFloat(5, player.x);
-        bbw.putFloat(5 + 4, player.y);
-
-        sendPacket(inPacket, send, (byte)254, 4 + 4);
+        sendPacket(inPacket, new PacketBuilder(OutboundPacketType.FORCE_TELEPORT, send)
+                .addFloat(player.x).addFloat(player.y));
     }
 
+    /**
+     * Validates visuals and movement from a player, supplied its information and its latest packet in case of error
+     * @return  true if not kicked, false if kicked
+     */
     private boolean validatePlayerVisuals(UUID uuid, GamePlayer player, DatagramPacket inPacket, byte[] send, long now, int spriteIndex, int imageIndex, float x, float y)
     {
-        if (!TESTING)
+        if (!properties.testingMode)
         {
             if (player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517))) ||
                     player.imageIndex < 0 || player.imageIndex > 10)
@@ -157,7 +201,7 @@ public class GameServer
             if (Math.abs(x - player.x) > elapsedFrames * 6f ||
                 Math.abs(y - player.y) > elapsedFrames * 6f)
             {
-                if (KICK_BAD_MOVEMENT)
+                if (properties.kickBadMovement)
                 {
                     LOG.logger.info("Player ID " + player.id + " from " + inPacket.getAddress().toString() + " kicked for invalid movement");
                     kickPlayer(uuid, player, inPacket, send, "Kicked for invalid movement (may be a bug)", true);
@@ -178,8 +222,12 @@ public class GameServer
         return true;
     }
 
+    /**
+     * The main server routine
+     */
     private void run()
     {
+        // Initialize player structures
         playerIDs = new HashSet<>();
         connectionsIP = new HashMap<>();
         sessions = new HashMap<>();
@@ -189,14 +237,14 @@ public class GameServer
         for (int i = 0; i < 336; i++)
             rooms.add(new ArrayList<>());
 
+        // Initialize the buffers (up to 4KB packets)
         byte[] receive = new byte[4096];
         byte[] send = new byte[4096];
-        send[0] = 'U';
-        send[1] = 'T';
-        send[2] = 'O';
-        send[3] = 0;
+        PacketBuilder.fillHeader(send);
+
         while (running)
         {
+            // Fill the receiving buffer with 0
             Arrays.fill(receive, (byte)0);
 
             DatagramPacket packet = new DatagramPacket(receive, receive.length);
@@ -209,14 +257,11 @@ public class GameServer
                 continue;
             }
 
-            ByteBuffer bb = ByteBuffer.wrap(receive);
-            bb.order(ByteOrder.LITTLE_ENDIAN);
+            PacketReader pr = new PacketReader(receive);
 
-            // Parse header
-            if (bb.get() != 'U') continue;
-            if (bb.get() != 'T') continue;
-            if (bb.get() != 'O') continue;
-            if (bb.get() != 0) continue;
+            // Ensure valid header
+            if (!pr.parseHeader())
+                continue;
 
             long now = System.currentTimeMillis();
 
@@ -224,7 +269,7 @@ public class GameServer
             if (now - LOG.lastInstantiation >= 60*60*1000)
                 LOG.instantiateLogger();
 
-            if (DISALLOW_SAME_IP)
+            if (properties.disallowSameIP)
             {
                 // Remove connections that haven't sent a packet in over 4 seconds
                 for (Iterator<Map.Entry<InetAddress, Pair<Long, UUID>>> it = connectionsIP.entrySet().iterator(); it.hasNext(); )
@@ -237,7 +282,6 @@ public class GameServer
                         UUID uuid = e.getValue().getValue();
                         kickPlayer(uuid, sessions.get(uuid), packet, send, null, true);
                     }
-                    // todo: we can handle rate-limiting here, potentially
                 }
             } else
             {
@@ -252,173 +296,180 @@ public class GameServer
                         kickPlayer(e.getKey(), p, packet, send, null, false);
                         it.remove();
                     }
-                    // todo: we can handle rate-limiting here, potentially
                 }
             }
 
-            switch (bb.get())
+            // Handle the packets by type
+            switch (pr.parseType())
             {
-                case 1: // Login packet
+                case LOGIN:
                 {
-                    if (DISALLOW_SAME_IP && connectionsIP.containsKey(packet.getAddress()))
+                    if (properties.disallowSameIP && connectionsIP.containsKey(packet.getAddress()))
                     {
                         LOG.logger.warning("Denied login packet from " + packet.getAddress().toString() + " (same IPs disallowed)");
                         break;
                     }
 
-                    if (playerIDs.size() >= MAX_PLAYERS)
+                    if (playerIDs.size() >= properties.maxPlayers)
                     {
                         LOG.logger.warning("Denied login packet from " + packet.getAddress().toString() + " (max players reached)");
-                        sendKickMessagePacket(packet, send, "Cannot join this server; it is at a maximum capacity of " + MAX_PLAYERS + " players.");
+                        sendKickMessagePacket(packet, send, "Cannot join this server; it is at a maximum capacity of " + properties.maxPlayers + " players.");
                         break;
                     }
 
+                    // Choose private UUID
                     UUID uuid;
                     do
                     {
                         uuid = UUID.randomUUID();
                     } while (sessions.containsKey(uuid));
 
+                    // Choose public ID
                     int id;
                     for (id = 0; id < Integer.MAX_VALUE; id++)
                         if (!playerIDs.contains(id))
                             break;
                     playerIDs.add(id);
 
+                    // Add session
                     GamePlayer player = new GamePlayer(packet.getAddress(), packet.getPort(), id, now);
                     sessions.put(uuid, player);
-                    if (DISALLOW_SAME_IP)
+                    if (properties.disallowSameIP)
                         connectionsIP.put(packet.getAddress(), new Pair<>(now, uuid));
 
-                    ByteBuffer bbw = ByteBuffer.wrap(send);
-                    bbw.order(ByteOrder.LITTLE_ENDIAN);
-                    bbw.putInt(5, id);
-                    bbw.putLong(5 + 4, uuid.getMostSignificantBits());
-                    bbw.putLong(5 + 4 + 8, uuid.getLeastSignificantBits());
+                    // Send ID/UUID response
+                    sendPacket(packet, new PacketBuilder(OutboundPacketType.SESSION, send).addInt(id).addUUID(uuid));
 
-                    LOG.logger.info("Login packet from " + packet.getAddress().toString() + ", assigning ID " + id);
-
-                    sendPacket(packet, send, (byte)1, 20);
+                    LOG.logger.info("Login packet from " + packet.getAddress().toString() + ", assigned ID " + id);
                     break;
                 }
-                case 2: // Heartbeat packet
+
+                case HEARTBEAT:
                 {
-                    if (DISALLOW_SAME_IP && !connectionsIP.containsKey(packet.getAddress()))
+                    if (properties.disallowSameIP && !connectionsIP.containsKey(packet.getAddress()))
                         break;
 
-                    long mostSignificantBits = bb.getLong();
-                    long leastSignificantBits = bb.getLong();
-                    UUID uuid = new UUID(mostSignificantBits, leastSignificantBits);
-
+                    UUID uuid = pr.getUUID();
                     GamePlayer p = sessions.get(uuid);
                     if (p != null)
                     {
                         p.connAddress = packet.getAddress();
                         p.connPort = packet.getPort();
 
-                        //LOG.logger.info("Heartbeat packet from " + packet.getAddress().toString() + ", ID " + p.id);
-                        if (DISALLOW_SAME_IP)
+                        if (properties.disallowSameIP)
                             connectionsIP.put(packet.getAddress(), new Pair<>(now, uuid));
                         p.lastPacketTime = now;
 
-                        sendPacket(packet, send, (byte)2, 0);
+                        sendPacket(packet, new PacketBuilder(OutboundPacketType.HEARTBEAT, send));
                     }
                     break;
                 }
-                case 10: // Change room packet
+
+                case PLAYER_CHANGE_ROOM:
                 {
-                    if (DISALLOW_SAME_IP && !connectionsIP.containsKey(packet.getAddress()))
+                    if (properties.disallowSameIP && !connectionsIP.containsKey(packet.getAddress()))
                         break;
 
-                    long mostSignificantBits = bb.getLong();
-                    long leastSignificantBits = bb.getLong();
-                    UUID uuid = new UUID(mostSignificantBits, leastSignificantBits);
-
+                    UUID uuid = pr.getUUID();
                     GamePlayer p = sessions.get(uuid);
                     if (p != null)
                     {
                         p.connAddress = packet.getAddress();
                         p.connPort = packet.getPort();
 
+                        // Make the player leave the room they're already in
                         if (p.room != -1)
                             playerLeaveRoom(p, send);
 
-                        int targetRoom = bb.getShort();
+                        // Verify target room
+                        int targetRoom = pr.getShort();
                         if (targetRoom < -1 || targetRoom >= 336)
                             targetRoom = -1;
                         p.room = targetRoom;
 
                         // Parse initial visuals
-                        int spriteIndex = bb.getShort();
-                        int imageIndex = bb.getShort();
-                        float x = bb.getFloat();
-                        float y = bb.getFloat();
+                        int spriteIndex = pr.getShort();
+                        int imageIndex = pr.getShort();
+                        float x = pr.getFloat();
+                        float y = pr.getFloat();
 
+                        // Validate visuals
                         p.lastMovePacketTime = -1;
                         if (!validatePlayerVisuals(uuid, p, packet, send, now, spriteIndex, imageIndex, x, y))
                             break;
                         p.lastPacketTime = now;
 
+                        // Ensure room changes aren't too frequent
+                        if (p.lastRoomChangeTime != -1)
+                        {
+                            if (now - p.lastRoomChangeTime < 200)
+                            {
+                                LOG.logger.info("Player ID " + p.id + " from " + packet.getAddress().toString() + " kicked for room changing");
+                                kickPlayer(uuid, p, packet, send, "Kicked for changing rooms too fast (may be a bug)", true);
+                                break;
+                            }
+                        }
+                        p.lastRoomChangeTime = now;
+
                         if (p.room != -1)
                         {
-                            ByteBuffer bbw = ByteBuffer.wrap(send);
-                            bbw.order(ByteOrder.LITTLE_ENDIAN);
-
                             // Send join packet to other players in the room
-                            bbw.putInt(5, p.room);
-                            bbw.putShort(5 + 4, (short)1);
-                            bbw.putInt(5 + 4 + 2, p.id);
-                            bbw.putShort(5 + 4 + 2 + 4, (short)p.spriteIndex);
-                            bbw.putShort(5 + 4 + 2 + 4 + 2, (short)p.imageIndex);
-                            bbw.putFloat(5 + 4 + 2 + 4 + 2 + 2, p.x);
-                            bbw.putFloat(5 + 4 + 2 + 4 + 2 + 2 + 4, p.y);
+                            PacketBuilder pb = new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM, send)
+                                    .addInt(p.room)
+                                    .addShort((short)1) // # of players
+                                    .addInt(p.id)
+                                    .addShort((short)p.spriteIndex)
+                                    .addShort((short)p.imageIndex)
+                                    .addFloat(p.x)
+                                    .addFloat(p.y);
                             List<GamePlayer> others = rooms.get(p.room);
                             for (GamePlayer other : others)
-                                sendPacket(other.connAddress, other.connPort, send, (byte)10,  4 + 2 + 4 + 2 + 2 + 4 + 4);
+                                sendPacket(other.connAddress, other.connPort, pb);
 
-                            // Send players in room packet to this player
                             if (others.size() != 0)
                             {
-                                bbw.putInt(5, p.room);
-                                bbw.putShort(5 + 4, (short)others.size());
-                                int sendIndex = 5 + 4 + 2;
+                                // Send players in room packet to this player
+                                pb = new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM, send)
+                                        .addInt(p.room)
+                                        .addShort((short)others.size());
                                 for (GamePlayer other : others)
                                 {
-                                    bbw.putInt(sendIndex, other.id); sendIndex += 4;
-                                    bbw.putShort(sendIndex, (short)other.spriteIndex); sendIndex += 2;
-                                    bbw.putShort(sendIndex, (short)other.imageIndex); sendIndex += 2;
-                                    bbw.putFloat(sendIndex, other.x); sendIndex += 4;
-                                    bbw.putFloat(sendIndex, other.y); sendIndex += 4;
+                                    pb.addInt(other.id)
+                                        .addShort((short)other.spriteIndex)
+                                        .addShort((short)other.imageIndex)
+                                        .addFloat(other.x)
+                                        .addFloat(other.y);
                                 }
 
-                                sendPacket(packet, send, (byte)10, sendIndex);
+                                sendPacket(packet, pb);
                             }
 
+                            // Actually add player to the room structure
                             rooms.get(p.room).add(p);
                         }
                     }
                     break;
                 }
-                case 11: // Visuals packet
+
+                case PLAYER_VISUAL_UPDATE:
                 {
-                    if (DISALLOW_SAME_IP && !connectionsIP.containsKey(packet.getAddress()))
+                    if (properties.disallowSameIP && !connectionsIP.containsKey(packet.getAddress()))
                         break;
 
-                    long mostSignificantBits = bb.getLong();
-                    long leastSignificantBits = bb.getLong();
-                    UUID uuid = new UUID(mostSignificantBits, leastSignificantBits);
-
+                    UUID uuid = pr.getUUID();
                     GamePlayer p = sessions.get(uuid);
                     if (p != null)
                     {
                         p.connAddress = packet.getAddress();
                         p.connPort = packet.getPort();
 
-                        int spriteIndex = bb.getShort();
-                        int imageIndex = bb.getShort();
-                        float x = bb.getFloat();
-                        float y = bb.getFloat();
+                        // Parse visuals
+                        int spriteIndex = pr.getShort();
+                        int imageIndex = pr.getShort();
+                        float x = pr.getFloat();
+                        float y = pr.getFloat();
 
+                        // Validate visuals
                         if (!validatePlayerVisuals(uuid, p, packet, send, now, spriteIndex, imageIndex, x, y))
                             break;
                         p.lastPacketTime = now;
@@ -426,21 +477,20 @@ public class GameServer
 
                         if (p.room != -1)
                         {
-                            // Send movement packet to other players in the room
-                            ByteBuffer bbw = ByteBuffer.wrap(send);
-                            bbw.order(ByteOrder.LITTLE_ENDIAN);
-                            bbw.putLong(5, now);
-                            bbw.putInt(5 + 8, p.room);
-                            bbw.putInt(5 + 8 + 4, p.id);
-                            bbw.putShort(5 + 8 + 4 + 4, (short)p.spriteIndex);
-                            bbw.putShort(5 + 8 + 4 + 4 + 2, (short)p.imageIndex);
-                            bbw.putFloat(5 + 8 + 4 + 4 + 2 + 2, p.x);
-                            bbw.putFloat(5 + 8 + 4 + 4 + 2 + 2 + 4, p.y);
+                            // Send visual update packet to other players in the room
+                            PacketBuilder pb = new PacketBuilder(OutboundPacketType.PLAYER_VISUAL_UPDATE, send)
+                                    .addLong(now)
+                                    .addInt(p.room)
+                                    .addInt(p.id)
+                                    .addShort((short)p.spriteIndex)
+                                    .addShort((short)p.imageIndex)
+                                    .addFloat(p.x)
+                                    .addFloat(p.y);
                             for (GamePlayer other : rooms.get(p.room))
                             {
                                 if (other == p)
                                     continue;
-                                sendPacket(other.connAddress, other.connPort, send, (byte)12, 8 + 4 + 4 + 2 + 2 + 4 + 4);
+                                sendPacket(other.connAddress, other.connPort, pb);
                             }
                         }
                     }

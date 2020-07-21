@@ -1,12 +1,13 @@
 package me.colinator27;
 
-import java.io.File;
 import java.text.SimpleDateFormat;
-import java.util.ArrayList;
 import java.util.Calendar;
 import java.util.GregorianCalendar;
 import java.util.logging.*;
 
+/**
+ * Class to deal with logging to console/files
+ */
 public class Log
 {
     public Logger logger;
@@ -15,12 +16,19 @@ public class Log
 
     public long lastInstantiation;
 
+    /**
+     * @param type  the string identifier of the log
+     */
     public Log(String type)
     {
         this.type = type;
         instantiateLogger();
     }
 
+    /**
+     * Sets up the handlers and Java Logger for logging.
+     * If it was set up previously, the old handlers are flushed and replaced.
+     */
     public void instantiateLogger()
     {
         if (logger != null)
