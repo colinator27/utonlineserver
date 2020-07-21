@@ -316,11 +316,7 @@ public class GameServer
                     }
 
                     // Choose private UUID
-                    UUID uuid;
-                    do
-                    {
-                        uuid = UUID.randomUUID();
-                    } while (sessions.containsKey(uuid));
+                    UUID uuid = UUID.randomUUID();
 
                     // Choose public ID
                     int id;
