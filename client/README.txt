@@ -1,0 +1,1 @@
+This is the client-side code for an Undertale multiplayer mod. This is a script file designed to be operated on with [UndertaleModTool](https://github.com/krzys-h/UndertaleModTool), using a legitimate copy of Undertale version 1.08.
