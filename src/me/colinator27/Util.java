@@ -18,4 +18,18 @@ public class Util
             return "";
         }
     }
+    
+    /**
+     * 
+     * @param bytes      byte array to read from
+     * @param len        number of bytes to stringify
+     * @return           the array of bytes in string form
+     */
+    public static String stringify(byte[] bytes, int len) {
+    	StringBuilder sb = new StringBuilder();
+    	for(int i = 0; i < len; i++) {
+    		sb.append(String.format("\\x%02x", bytes[i]));
+    	}
+    	return sb.toString();
+    }
 }

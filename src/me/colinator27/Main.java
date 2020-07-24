@@ -130,7 +130,7 @@ public class Main
         assert disallowSameIP.size() == count;
         for (int i = 0; i < count; i++)
             servers.add(new GameServer(new ServerProperties(ports.get(i), maxPlayers.get(i), testingMode.get(i), kickBadMovement.get(i), disallowSameIP.get(i))));
-
+        servers.forEach(GameServer::start);
         // Wait for all of the servers to stop
         while (anythingRunning())
         {

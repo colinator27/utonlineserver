@@ -1,4 +1,4 @@
-package me.colinator27;
+package me.colinator27.packet;
 
 /**
  * The various inbound (from client) packet types
@@ -25,6 +25,6 @@ public enum InboundPacketType
             if (t.id == id)
                 return t;
         }
-        throw new IllegalArgumentException();
+        throw new IllegalArgumentException("no packet type with id " + id);
     }
 }

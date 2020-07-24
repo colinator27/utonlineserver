@@ -1,4 +1,4 @@
-package me.colinator27;
+package me.colinator27.packet;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -44,11 +44,15 @@ public class PacketBuilder
      */
     public PacketBuilder(OutboundPacketType type, byte[] send)
     {
+    	PacketBuilder.fillHeader(send);
         this.send = send;
         bb = ByteBuffer.wrap(send);
         bb.order(ByteOrder.LITTLE_ENDIAN);
         send[4] = type.id;
         this.offset = SEND_OFFSET;
+    }
+    public PacketBuilder(OutboundPacketType type) {
+    	this(type, new byte[4096]);
     }
 
     /**

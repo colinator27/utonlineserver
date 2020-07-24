@@ -1,6 +1,7 @@
 package me.colinator27;
 
 import java.net.InetAddress;
+import java.util.UUID;
 
 /**
  * Data for individual sessions/players
@@ -10,7 +11,12 @@ public class GamePlayer
     /**
      * The public ID of the player
      */
-    public int id;
+    public final int id;
+    
+    /**
+     * The internal ID of the player
+     */
+    public final UUID uuid;
 
     /**
      * The last time (in ms) of a move packet from this player being processed
@@ -69,11 +75,13 @@ public class GamePlayer
      * @param id            the public ID of the player
      * @param now           the current time, aka when the login packet was processed
      */
-    public GamePlayer(InetAddress connAddress, int connPort, int id, long now)
+    public GamePlayer(InetAddress connAddress, int connPort, UUID uuid, int id, long now)
     {
         this.connAddress = connAddress;
         this.connPort = connPort;
+        this.uuid = uuid;
         this.id = id;
+        
         lastPacketTime = now;
     }
 }
