@@ -1,5 +1,7 @@
 package me.colinator27;
 
+import me.colinator27.packet.Connection;
+
 import java.net.InetAddress;
 import java.util.UUID;
 
@@ -35,23 +37,18 @@ public class GamePlayer {
     /** The current Y coordinate of the player */
     public float y = 0f;
 
-    /** The current IP address of the player */
-    public InetAddress connAddress;
-
-    /** The current port of the player */
-    public int connPort;
+    /** The current connection of the player */
+    public Connection connection;
 
     /**
      * Initialize a new player object
      *
-     * @param connAddress the current IP address of the player
-     * @param connPort the current port of the player
+     * @param connection the current connection of the player
      * @param id the public ID of the player
      * @param now the current time, aka when the login packet was processed
      */
-    public GamePlayer(InetAddress connAddress, int connPort, UUID uuid, int id, long now) {
-        this.connAddress = connAddress;
-        this.connPort = connPort;
+    public GamePlayer(Connection connection, UUID uuid, int id, long now) {
+        this.connection = connection;
         this.uuid = uuid;
         this.id = id;
 

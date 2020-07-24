@@ -6,12 +6,11 @@ import me.colinator27.Log;
 import me.colinator27.SessionManager;
 import me.colinator27.Util;
 
-import java.net.InetAddress;
 import java.util.ArrayDeque;
-import java.util.ArrayList;
 import java.util.List;
 import java.util.Queue;
 import java.util.UUID;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.atomic.AtomicBoolean;
@@ -20,8 +19,8 @@ public class PacketHandler {
 
     private Log LOG;
     private GameServer server;
-    private InetAddress owner;
-    private Queue<Packet> queue;
+    private Connection owner;
+    private final Queue<Packet> queue;
     private ExecutorService executor;
 
     private List<Long> timestamps;
@@ -30,7 +29,7 @@ public class PacketHandler {
 
     private final byte[] send;
 
-    public PacketHandler(GameServer server, InetAddress owner) {
+    public PacketHandler(GameServer server, Connection owner) {
         this.ratelimited = new AtomicBoolean(false);
         this.running = new AtomicBoolean(false);
         this.queue = new ArrayDeque<>();
@@ -39,10 +38,11 @@ public class PacketHandler {
         this.server = server;
         this.owner = owner;
 
-        this.timestamps = new ArrayList<>();
+        this.timestamps = new CopyOnWriteArrayList<>();
         this.send = new byte[4096];
 
         this.LOG = server.LOG;
+        LOG.logger.info("Created packet handler for " + owner);
     }
 
     public void dispatch(Packet packet) {
@@ -60,9 +60,6 @@ public class PacketHandler {
         }
         executor.execute(
                 () -> {
-                    LOG.logger.info("Created packet handler for " + owner);
-
-                    // ConnectionManager connectionManager = server.getConnectionManager();
                     SessionManager sessionManager = server.getSessionManager();
 
                     PacketBuilder builder;
@@ -74,20 +71,17 @@ public class PacketHandler {
                     float x, y;
                     long now;
 
-                    loop:
                     while (running.get()) {
-
                         player = null;
                         uuid = null;
 
-                        while (queue.isEmpty()) {
-                            if (!running.get()) {
-                                break loop;
-                            }
-                        }
                         Packet packet;
                         synchronized (queue) {
-                            ;
+                            if (queue.isEmpty())
+                            {
+                                running.set(false);
+                                break;
+                            }
                             packet = queue.poll();
                         }
 
@@ -97,30 +91,19 @@ public class PacketHandler {
                             if (!ratelimited.getAndSet(true)) {
                                 LOG.logger.warning("Client at " + owner + " is hitting ratelimits");
 
-                                for (GamePlayer p : sessionManager.getPlayers()) {
-                                    if (p.connAddress.equals(owner)) {
-                                        server.sendPacket(
-                                                p.connAddress,
-                                                p.connPort,
-                                                new PacketBuilder(
-                                                        OutboundPacketType.RATELIMIT_WARNING,
-                                                        send));
-                                    }
-                                }
+                                server.sendPacket(owner, new PacketBuilder(OutboundPacketType.RATELIMIT_WARNING, send));
                             }
                             continue;
                         }
                         if (ratelimited.getAndSet(false)) {
-                            LOG.logger.info(
-                                    "Client at " + owner + " is no longer hitting ratelimits");
+                            LOG.logger.info("Client at " + owner + " is no longer hitting ratelimits");
                         }
 
                         reader = packet.getReader();
 
                         if (!reader.validate()) {
                             LOG.logger.warning("Client at " + owner + " sent invalid data");
-                            LOG.logger.warning(
-                                    Util.stringify(packet.getData(), packet.getLength()));
+                            LOG.logger.warning(Util.stringify(packet.getData(), packet.getLength()));
                             continue;
                         }
 
@@ -129,31 +112,22 @@ public class PacketHandler {
                                 case LOGIN:
                                     {
                                         if (server.properties.disallowSameIP
-                                                && !sessionManager.getPlayers(owner).isEmpty()) {
+                                                && sessionManager.getPlayer(owner) != null) {
                                             LOG.logger.info(
                                                     "Rejected session request from "
                                                             + owner
-                                                            + ":"
-                                                            + packet.getPort()
                                                             + " (same IPs disallowed)");
                                             continue;
                                         }
-                                        player =
-                                                sessionManager.createPlayer(
-                                                        owner, packet.getPort());
+                                        player = sessionManager.createPlayer(owner);
                                         if (player == null) {
                                             LOG.logger.info(
                                                     "Rejected session request from "
                                                             + owner
-                                                            + ":"
-                                                            + packet.getPort()
                                                             + " (server is full)");
                                             server.sendPacket(
                                                     owner,
-                                                    packet.getPort(),
-                                                    new PacketBuilder(
-                                                                    OutboundPacketType.KICK_MESSAGE,
-                                                                    send)
+                                                    new PacketBuilder(OutboundPacketType.KICK_MESSAGE, send)
                                                             .addString(
                                                                     "Cannot join this server; it"
                                                                         + " is at a maximum"
@@ -165,15 +139,13 @@ public class PacketHandler {
                                         }
                                         LOG.logger.info(
                                                 String.format(
-                                                        "Created session for %s:%s (id = %d, uuid"
+                                                        "Created session for %s (id = %d, uuid"
                                                             + " = %s)",
                                                         owner,
-                                                        packet.getPort(),
                                                         player.id,
                                                         player.uuid));
                                         server.sendPacket(
                                                 owner,
-                                                packet.getPort(),
                                                 new PacketBuilder(OutboundPacketType.SESSION, send)
                                                         .addInt(player.id)
                                                         .addUUID(player.uuid));
@@ -185,15 +157,10 @@ public class PacketHandler {
                                         player = sessionManager.getPlayer(uuid);
 
                                         if (player != null) {
-                                            player.connAddress = owner;
-                                            player.connPort = packet.getPort();
+                                            player.connection = owner; // todo: this may be unnecessary? owner would have to change first
 
                                             player.lastPacketTime = System.currentTimeMillis();
-                                            server.sendPacket(
-                                                    owner,
-                                                    packet.getPort(),
-                                                    new PacketBuilder(
-                                                            OutboundPacketType.HEARTBEAT, send));
+                                            server.sendPacket(owner, new PacketBuilder(OutboundPacketType.HEARTBEAT, send));
                                         }
                                     }
                                     break;
@@ -230,15 +197,9 @@ public class PacketHandler {
                                             x = reader.getFloat();
                                             y = reader.getFloat();
 
-                                            player.lastPacketTime = System.currentTimeMillis();
-                                            if (server.validatePlayerVisuals(
-                                                            player, spriteIndex, imageIndex, x, y)
-                                                    && player.room != -1) {
-                                                builder =
-                                                        new PacketBuilder(
-                                                                        OutboundPacketType
-                                                                                .PLAYER_VISUAL_UPDATE,
-                                                                        send)
+                                            player.lastPacketTime = now;
+                                            if (server.validatePlayerVisuals(player, spriteIndex, imageIndex, x, y) && player.room != -1) {
+                                                builder = new PacketBuilder(OutboundPacketType.PLAYER_VISUAL_UPDATE, send)
                                                                 .addLong(now)
                                                                 .addInt(player.room)
                                                                 .addInt(player.id)
@@ -249,15 +210,11 @@ public class PacketHandler {
 
                                                 for (GamePlayer other :
                                                         server.getPlayersInRoom(player.room)) {
-                                                    if (other == player) {
-                                                        continue;
-                                                    }
-                                                    server.sendPacket(
-                                                            other.connAddress,
-                                                            other.connPort,
-                                                            builder);
+                                                    if (other == player) continue;
+                                                    server.sendPacket(other.connection, builder);
                                                 }
                                             }
+                                            player.lastMovePacketTime = now;
                                         }
                                     }
                                     break;
@@ -265,9 +222,7 @@ public class PacketHandler {
                         } catch (Throwable e) {
                             LOG.logger.severe(
                                     "An internal error occured while processing a packet from "
-                                            + packet.getAddress()
-                                            + ":"
-                                            + packet.getPort());
+                                            + packet.getConnection());
 
                             if (player == null) {
                                 player = sessionManager.getPlayer(uuid);

@@ -1,8 +1,8 @@
-// Script by colinator27, designed to be used with server at https://github.com/colinator27/utonlineserver
+// Script by colinator27 and BenjaminUrquhart, designed to be used with server at https://github.com/colinator27/utonlineserver
 
 EnsureDataLoaded();
 
-ScriptMessage("Adds client-side code to see other players\nFor Undertale 1.08\nby colinator27");
+ScriptMessage("Adds client-side code to see other players\nFor Undertale 1.08\nby colinator27 and BenjaminUrquhart");
 
 // Make script references
 var send_packet = new UndertaleCode() { Name = Data.Strings.MakeString("gml_Script_send_packet") };
@@ -67,7 +67,7 @@ if (state == 1)
 		updatePacketTimer = 0;
 		if (connected && state == 1)
 		{
-			if (!instance_exists(obj_mainchara))
+			if (!instance_exists(obj_mainchara) || !obj_mainchara.visible)
 			{
 				if (prevRoom != -1)
 				{
@@ -154,7 +154,7 @@ if (state != -1)
 obj_uto_client.EventHandlerFor(EventType.Draw, EventSubtypeDraw.DrawGUI, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
 draw_set_color(c_yellow);
 draw_set_font(fnt_main);
-draw_text(5, 5, playerId);
+draw_text(5, 5-8, playerId);
 ", Data);
 
 obj_uto_client.EventHandlerFor(EventType.Other, EventSubtypeOther.AsyncDialog, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
@@ -220,10 +220,22 @@ Data.GameObjects.Add(obj_mainchara_other);
 
 obj_mainchara_other.EventHandlerFor(EventType.Create, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
 playerId = -1;
-image_alpha = 0.5;
+
+image_alpha = 0;
 image_speed = 0;
+
 targetX = x;
 targetY = y;
+
+// Whether clipping into solid objects in the past 5 frames
+clipping[4] = false;
+clipping[3] = false;
+clipping[2] = false;
+clipping[1] = false;
+clipping[0] = false;
+shouldHide = false;
+
+alarm[1] = 1;
 ", Data);
 
 obj_mainchara_other.EventHandlerFor(EventType.Alarm, (uint)0, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
@@ -231,13 +243,36 @@ x = targetX;
 y = targetY;
 ", Data);
 
+obj_mainchara_other.EventHandlerFor(EventType.Alarm, (uint)1, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
+image_alpha += 0.05;
+if (image_alpha < 0.5)
+	alarm[1] = 1;
+", Data);
+
+obj_mainchara_other.EventHandlerFor(EventType.Alarm, (uint)2, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
+image_alpha -= 0.1;
+if (image_alpha > 0)
+	alarm[2] = 1;
+else
+	instance_destroy();
+", Data);
+
 obj_mainchara_other.EventHandlerFor(EventType.Step, EventSubtypeStep.Step, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
 scr_depth();
+
+for (var i = 4; i > 0; i--)
+	clipping[i] = clipping[i - 1];
+clipping[0] = place_meeting(x, y, obj_solidparent);
+shouldHide = true;
+for (var i = 0; i < 5; i++)	
+	shouldHide &= clipping[i];
 ", Data);
 
 obj_mainchara_other.EventHandlerFor(EventType.Draw, EventSubtypeDraw.Draw, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
+if (shouldHide)
+	exit; // hide potential hackers
 draw_self();
-draw_set_alpha(0.75);
+draw_set_alpha(image_alpha * (0.75 * 2));
 draw_set_color(c_white);
 draw_set_font(fnt_maintext);
 draw_text(x + 6, y - 10, string(playerId));
@@ -317,7 +352,8 @@ switch (buffer_read(buff, buffer_u8))
 		var pid = buffer_read(buff, buffer_s32);
 		if (ds_map_exists(obj_uto_client.otherPlayers, pid))
 		{
-			instance_destroy(ds_map_find_value(obj_uto_client.otherPlayers, pid));
+			with (ds_map_find_value(obj_uto_client.otherPlayers, pid))
+				alarm[2] = 1;
 			ds_map_delete(obj_uto_client.otherPlayers, pid);
 		}
 		break;

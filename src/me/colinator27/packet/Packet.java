@@ -1,26 +1,19 @@
 package me.colinator27.packet;
 
 import java.net.DatagramPacket;
-import java.net.InetAddress;
 
 public class Packet {
 
     private DatagramPacket packet;
     private PacketReader reader;
-    private InetAddress address;
-    private int port;
+    private Connection connection;
 
-    public Packet(InetAddress address, int port, byte[] data, int length) {
-        this(new DatagramPacket(data, length, address, port));
-    }
-
-    public Packet(InetAddress address, int port, byte[] data) {
-        this(address, port, data, data.length);
+    public Packet(Connection connection, byte[] data, int length) {
+        this(new DatagramPacket(data, length, connection.address, connection.port));
     }
 
     public Packet(DatagramPacket packet) {
-        this.address = packet.getAddress();
-        this.port = packet.getPort();
+        this.connection = new Connection(packet.getAddress(), packet.getPort());
 
         this.packet = packet;
     }
@@ -36,12 +29,8 @@ public class Packet {
         return reader;
     }
 
-    public InetAddress getAddress() {
-        return address;
-    }
-
-    public int getPort() {
-        return port;
+    public Connection getConnection() {
+        return connection;
     }
 
     public byte[] getData() {

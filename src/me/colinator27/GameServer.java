@@ -1,9 +1,6 @@
 package me.colinator27;
 
-import me.colinator27.packet.ConnectionManager;
-import me.colinator27.packet.OutboundPacketType;
-import me.colinator27.packet.Packet;
-import me.colinator27.packet.PacketBuilder;
+import me.colinator27.packet.*;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
@@ -11,6 +8,7 @@ import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.util.concurrent.CopyOnWriteArrayList;
 import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
@@ -28,7 +26,7 @@ public class GameServer {
     private ExecutorService executor;
     private Future<?> future;
 
-    private List<List<GamePlayer>> rooms;
+    private List<CopyOnWriteArrayList<GamePlayer>> rooms;
 
     public GameServer(ServerProperties properties) {
         this.properties = properties;
@@ -38,6 +36,8 @@ public class GameServer {
         this.connectionManager = new ConnectionManager(this);
         this.sessionManager = new SessionManager(this);
         this.rooms = new ArrayList<>();
+        for (int i = 0; i < properties.maxRoomID; i++)
+            rooms.add(new CopyOnWriteArrayList<>());
 
         LOG.logger.info("Server opening on port " + properties.port);
         LOG.instantiateLogger();
@@ -97,7 +97,7 @@ public class GameServer {
                             .addShort((short) list.size());
 
             for (GamePlayer other : list) {
-                this.sendPacket(other.connAddress, other.connPort, packet);
+                this.sendPacket(other.connection, packet);
 
                 packet2.addInt(other.id)
                         .addShort((short) other.spriteIndex)
@@ -105,7 +105,7 @@ public class GameServer {
                         .addFloat(other.x)
                         .addFloat(other.y);
             }
-            this.sendPacket(player.connAddress, player.connPort, packet2);
+            this.sendPacket(player.connection, packet2);
             list.add(player);
         }
     }
@@ -120,24 +120,17 @@ public class GameServer {
                             .addInt(room)
                             .addInt(player.id);
 
-            for (GamePlayer other : list) {
-                this.sendPacket(other.connAddress, other.connPort, packet);
-            }
+            for (GamePlayer other : list) this.sendPacket(other.connection, packet);
             player.room = -1;
         }
     }
 
     public boolean isValidRoom(int room) {
-        return room > -1 && room < 336;
+        return room > -1 && room <= properties.maxRoomID;
     }
 
     private List<GamePlayer> getEditableRoom(int room) {
-        if (this.isValidRoom(room)) {
-            while (rooms.size() <= room) {
-                rooms.add(new ArrayList<>());
-            }
-            return rooms.get(room);
-        }
+        if (this.isValidRoom(room)) return rooms.get(room);
         return new ArrayList<>();
     }
 
@@ -147,20 +140,15 @@ public class GameServer {
      *
      * @return true if not kicked, false if kicked
      */
-    public boolean validatePlayerVisuals(
-            GamePlayer player, int spriteIndex, int imageIndex, float x, float y) {
+    public boolean validatePlayerVisuals(GamePlayer player, int spriteIndex, int imageIndex, float x, float y) {
         if (!properties.testingMode) {
-            if (player.spriteIndex < 1088
-                    || (player.spriteIndex > 1139
-                            && (player.spriteIndex < 2373
-                                    || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
-                    || player.imageIndex < 0
-                    || player.imageIndex > 10) {
+            if (player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
+                || player.imageIndex < 0 || player.imageIndex > 10) {
                 LOG.logger.info(
                         "Player ID "
                                 + player.id
                                 + " from "
-                                + player.connAddress
+                                + player.connection.toString()
                                 + " kicked for invalid visuals ("
                                 + player.spriteIndex
                                 + ","
@@ -174,8 +162,7 @@ public class GameServer {
         long now = System.currentTimeMillis();
         if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
-            if (Math.abs(x - player.x) > elapsedFrames * 6f
-                    || Math.abs(y - player.y) > elapsedFrames * 6f) {
+            if (Math.abs(x - player.x) > elapsedFrames * 5f || Math.abs(y - player.y) > elapsedFrames * 5f) {
                 if (properties.kickBadMovement) {
                     LOG.logger.info(
                             "Player "
@@ -183,14 +170,13 @@ public class GameServer {
                                     + " ("
                                     + player.uuid
                                     + ") from "
-                                    + player.connAddress
+                                    + player.connection.toString()
                                     + " kicked for invalid movement");
                     sessionManager.kick(player, "Kicked for invalid movement (may be a bug)");
                     return false;
                 } else {
                     this.sendPacket(
-                            player.connAddress,
-                            player.connPort,
+                            player.connection,
                             new PacketBuilder(OutboundPacketType.FORCE_TELEPORT)
                                     .addFloat(player.x)
                                     .addFloat(player.y));
@@ -207,8 +193,8 @@ public class GameServer {
         return true;
     }
 
-    public void sendPacket(InetAddress address, int port, PacketBuilder packet) {
-        this.sendPacket(new Packet(address, port, packet.send, packet.getSize()));
+    public void sendPacket(Connection connection, PacketBuilder packet) {
+        this.sendPacket(new Packet(connection, packet.send, packet.getSize()));
     }
 
     public boolean sendPacket(Packet packet) {
@@ -250,7 +236,7 @@ public class GameServer {
                 packet = new DatagramPacket(new byte[4096], 4096);
                 socket.receive(packet);
 
-                connectionManager.cleanup().forEach(sessionManager::releaseAllPlayers);
+                connectionManager.cleanup().forEach(sessionManager::releasePlayer);
                 sessionManager.cleanup();
 
                 // LOG.logger.info(String.format("Recv: %s:%s -> %s", packet.getAddress(),

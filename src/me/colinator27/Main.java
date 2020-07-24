@@ -38,6 +38,9 @@ public class Main {
         // Max players for servers
         properties.setProperty("max-players", "20");
 
+        // Max room IDs for the servers
+        properties.setProperty("max-room-id", "335");
+
         // Testing mode (set to true if not for Undertale specifically)
         properties.setProperty("testing-mode", "false");
 
@@ -110,6 +113,11 @@ public class Main {
                         .map(Integer::parseInt)
                         .collect(Collectors.toList());
         assert maxPlayers.size() == count;
+        List<Integer> maxRoomIDs =
+                Arrays.stream(properties.getProperty("max-room-id").split(","))
+                        .map(Integer::parseInt)
+                        .collect(Collectors.toList());
+        assert maxRoomIDs.size() == count;
         List<Boolean> testingMode =
                 Arrays.stream(properties.getProperty("testing-mode").split(","))
                         .map(Boolean::parseBoolean)
@@ -131,6 +139,7 @@ public class Main {
                             new ServerProperties(
                                     ports.get(i),
                                     maxPlayers.get(i),
+                                    maxRoomIDs.get(i),
                                     testingMode.get(i),
                                     kickBadMovement.get(i),
                                     disallowSameIP.get(i))));

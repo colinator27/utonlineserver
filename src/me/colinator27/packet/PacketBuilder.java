@@ -132,7 +132,7 @@ public class PacketBuilder {
      */
     public PacketBuilder addString(String val) {
         byte[] buff = val.getBytes();
-        for (int i = 0; i < buff.length; i++) send[i + offset] = buff[i];
+        System.arraycopy(buff, 0, send, offset, buff.length);
         send[buff.length + offset] = 0;
         offset += buff.length + 1;
         return this;

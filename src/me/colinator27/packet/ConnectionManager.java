@@ -3,7 +3,6 @@ package me.colinator27.packet;
 import me.colinator27.GameServer;
 import me.colinator27.Log;
 
-import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.HashMap;
 import java.util.List;
@@ -13,8 +12,8 @@ import java.util.stream.Collectors;
 
 public class ConnectionManager {
 
-    private Map<InetAddress, PacketHandler> handlers;
-    private Map<InetAddress, Long> lastPackets;
+    private Map<Connection, PacketHandler> handlers;
+    private Map<Connection, Long> lastPackets;
     private GameServer server;
     private Log LOG;
 
@@ -26,15 +25,15 @@ public class ConnectionManager {
         this.LOG = server.LOG;
     }
 
-    public Set<InetAddress> cleanup() {
+    public Set<Connection> cleanup() {
         final long time = System.currentTimeMillis();
-        Set<InetAddress> out =
+        Set<Connection> out =
                 handlers.keySet().stream()
                         .filter(handler -> time - lastPackets.get(handler) > 4000)
                         .collect(Collectors.toSet());
 
         PacketHandler handler;
-        for (InetAddress addr : out) {
+        for (Connection addr : out) {
             LOG.logger.info("Removing packet handler for " + addr);
             lastPackets.remove(addr);
             handler = handlers.remove(addr);
@@ -47,19 +46,19 @@ public class ConnectionManager {
     }
 
     public synchronized void dispatch(Packet packet) {
-        lastPackets.put(packet.getAddress(), System.currentTimeMillis());
+        lastPackets.put(packet.getConnection(), System.currentTimeMillis());
         handlers.computeIfAbsent(
-                        packet.getAddress(), $ -> new PacketHandler(server, packet.getAddress()))
+                        packet.getConnection(), $ -> new PacketHandler(server, packet.getConnection()))
                 .dispatch(packet);
     }
 
-    public void disconnectAll(InetAddress address) {
-        server.getSessionManager().releaseAllPlayers(address);
+    public void disconnectAll(Connection address) {
+        server.getSessionManager().releasePlayer(address);
         lastPackets.remove(address);
         handlers.remove(address);
     }
 
-    public List<InetAddress> getConnectedAddresses() {
+    public List<Connection> getConnectedAddresses() {
         return new ArrayList<>(handlers.keySet());
     }
 }
