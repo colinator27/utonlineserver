@@ -1,5 +1,10 @@
 package me.colinator27;
 
+import me.colinator27.packet.ConnectionManager;
+import me.colinator27.packet.OutboundPacketType;
+import me.colinator27.packet.Packet;
+import me.colinator27.packet.PacketBuilder;
+
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
 import java.net.InetAddress;
@@ -10,165 +15,190 @@ import java.util.concurrent.ExecutorService;
 import java.util.concurrent.Executors;
 import java.util.concurrent.Future;
 
-import me.colinator27.packet.ConnectionManager;
-import me.colinator27.packet.OutboundPacketType;
-import me.colinator27.packet.Packet;
-import me.colinator27.packet.PacketBuilder;
-
 public class GameServer {
 
-	public final ServerProperties properties;
-	public final Log LOG;
-	
-	private ConnectionManager connectionManager;
-	private SessionManager sessionManager;
-	
-	private DatagramSocket socket;
-	
-	private ExecutorService executor;
-	private Future<?> future;
-	
-	private List<List<GamePlayer>> rooms;
-	
-	public GameServer(ServerProperties properties) {
-		this.properties = properties;
-		
-		this.LOG = new Log("s" + properties.port);
-		
-		this.connectionManager = new ConnectionManager(this);
-		this.sessionManager = new SessionManager(this);
-		this.rooms = new ArrayList<>();
-		
-		LOG.logger.info("Server opening on port " + properties.port);
-		LOG.instantiateLogger();
-		try {
-			this.socket = new DatagramSocket(properties.port);
-		}
-		catch(Exception e) {
-			LOG.logException(e);
-			return;
-		}
-		
-		this.executor = Executors.newSingleThreadExecutor();
-	}
-	
-	public ConnectionManager getConnectionManager() {
-		return connectionManager;
-	}
-	public SessionManager getSessionManager() {
-		return sessionManager;
-	}
-	public List<GamePlayer> getPlayersInRoom(int room) {
-		if(!this.isValidRoom(room)) {
-			return Collections.emptyList();
-		}
-		return Collections.unmodifiableList(this.getEditableRoom(room));
-	}
-	public void addPlayerToRoom(GamePlayer player, int room) {
-		if(this.isValidRoom(room)) {
-			long now = System.currentTimeMillis();
-			
-			if(player.lastRoomChangeTime > -1 && now - player.lastRoomChangeTime < 200) {
-				sessionManager.kick(player, "You are changing rooms too fast!");
-				return;
-			}
-			if(player.room != -1) {
-				this.removePlayerFromRoom(player, player.room);
-			}
-			player.lastRoomChangeTime = now;
-			player.room = room;
-			
-			List<GamePlayer> list = this.getEditableRoom(room);
-			PacketBuilder packet = new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM)
-					.addInt(room)
-					.addShort((short)1)
-					.addInt(player.id)
-					.addShort((short)player.spriteIndex)
-					.addShort((short)player.imageIndex)
-					.addFloat(player.x)
-					.addFloat(player.y);
-			
-			PacketBuilder packet2 = new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM)
-					.addInt(room)
-					.addShort((short)list.size());
-			
-			for(GamePlayer other : list) {
-				this.sendPacket(other.connAddress, other.connPort, packet);
-				
-				packet2.addInt(other.id)
-					   .addShort((short)other.spriteIndex)
-					   .addShort((short)other.imageIndex)
-					   .addFloat(other.x)
-					   .addFloat(other.y);
-			}
-			this.sendPacket(player.connAddress, player.connPort, packet2);
-			list.add(player);
-		}
-	}
-	public void removePlayerFromRoom(GamePlayer player, int room) {
-		if(this.isValidRoom(room)) {
-			List<GamePlayer> list = this.getEditableRoom(room);
-			list.remove(player);
-			
-			PacketBuilder packet = new PacketBuilder(OutboundPacketType.PLAYER_LEAVE_ROOM).addInt(room).addInt(player.id);
-			
-			for(GamePlayer other : list) {
-				this.sendPacket(other.connAddress, other.connPort, packet);
-			}
-			player.room = -1;
-		}
-	}
-	public boolean isValidRoom(int room) {
-		return room > -1 && room < 336;
-	}
-	
-	private List<GamePlayer> getEditableRoom(int room) {
-		if(this.isValidRoom(room)) {
-			while(rooms.size() <= room) {
-				rooms.add(new ArrayList<>());
-			}
-			return rooms.get(room);
-		}
-		return new ArrayList<>();
-	}
-	
-	/**
-     * Validates visuals and movement from a player, supplied its information and its latest packet in case of error
-     * @return  true if not kicked, false if kicked
+    public final ServerProperties properties;
+    public final Log LOG;
+
+    private ConnectionManager connectionManager;
+    private SessionManager sessionManager;
+
+    private DatagramSocket socket;
+
+    private ExecutorService executor;
+    private Future<?> future;
+
+    private List<List<GamePlayer>> rooms;
+
+    public GameServer(ServerProperties properties) {
+        this.properties = properties;
+
+        this.LOG = new Log("s" + properties.port);
+
+        this.connectionManager = new ConnectionManager(this);
+        this.sessionManager = new SessionManager(this);
+        this.rooms = new ArrayList<>();
+
+        LOG.logger.info("Server opening on port " + properties.port);
+        LOG.instantiateLogger();
+        try {
+            this.socket = new DatagramSocket(properties.port);
+        } catch (Exception e) {
+            LOG.logException(e);
+            return;
+        }
+
+        this.executor = Executors.newSingleThreadExecutor();
+    }
+
+    public ConnectionManager getConnectionManager() {
+        return connectionManager;
+    }
+
+    public SessionManager getSessionManager() {
+        return sessionManager;
+    }
+
+    public List<GamePlayer> getPlayersInRoom(int room) {
+        if (!this.isValidRoom(room)) {
+            return Collections.emptyList();
+        }
+        return Collections.unmodifiableList(this.getEditableRoom(room));
+    }
+
+    public void addPlayerToRoom(GamePlayer player, int room) {
+        if (this.isValidRoom(room)) {
+            long now = System.currentTimeMillis();
+
+            if (player.lastRoomChangeTime > -1 && now - player.lastRoomChangeTime < 200) {
+                sessionManager.kick(player, "You are changing rooms too fast!");
+                return;
+            }
+            if (player.room != -1) {
+                this.removePlayerFromRoom(player, player.room);
+            }
+            player.lastRoomChangeTime = now;
+            player.room = room;
+
+            List<GamePlayer> list = this.getEditableRoom(room);
+            PacketBuilder packet =
+                    new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM)
+                            .addInt(room)
+                            .addShort((short) 1)
+                            .addInt(player.id)
+                            .addShort((short) player.spriteIndex)
+                            .addShort((short) player.imageIndex)
+                            .addFloat(player.x)
+                            .addFloat(player.y);
+
+            PacketBuilder packet2 =
+                    new PacketBuilder(OutboundPacketType.PLAYER_JOIN_ROOM)
+                            .addInt(room)
+                            .addShort((short) list.size());
+
+            for (GamePlayer other : list) {
+                this.sendPacket(other.connAddress, other.connPort, packet);
+
+                packet2.addInt(other.id)
+                        .addShort((short) other.spriteIndex)
+                        .addShort((short) other.imageIndex)
+                        .addFloat(other.x)
+                        .addFloat(other.y);
+            }
+            this.sendPacket(player.connAddress, player.connPort, packet2);
+            list.add(player);
+        }
+    }
+
+    public void removePlayerFromRoom(GamePlayer player, int room) {
+        if (this.isValidRoom(room)) {
+            List<GamePlayer> list = this.getEditableRoom(room);
+            list.remove(player);
+
+            PacketBuilder packet =
+                    new PacketBuilder(OutboundPacketType.PLAYER_LEAVE_ROOM)
+                            .addInt(room)
+                            .addInt(player.id);
+
+            for (GamePlayer other : list) {
+                this.sendPacket(other.connAddress, other.connPort, packet);
+            }
+            player.room = -1;
+        }
+    }
+
+    public boolean isValidRoom(int room) {
+        return room > -1 && room < 336;
+    }
+
+    private List<GamePlayer> getEditableRoom(int room) {
+        if (this.isValidRoom(room)) {
+            while (rooms.size() <= room) {
+                rooms.add(new ArrayList<>());
+            }
+            return rooms.get(room);
+        }
+        return new ArrayList<>();
+    }
+
+    /**
+     * Validates visuals and movement from a player, supplied its information and its latest packet
+     * in case of error
+     *
+     * @return true if not kicked, false if kicked
      */
-    public boolean validatePlayerVisuals(GamePlayer player, int spriteIndex, int imageIndex, float x, float y) {
-        if(!properties.testingMode) {
-            if(player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517))) ||
-                    player.imageIndex < 0 || player.imageIndex > 10) {
-                LOG.logger.info("Player ID " + player.id + " from " + player.connAddress + " kicked for invalid visuals (" + player.spriteIndex + "," + player.imageIndex + ")");
+    public boolean validatePlayerVisuals(
+            GamePlayer player, int spriteIndex, int imageIndex, float x, float y) {
+        if (!properties.testingMode) {
+            if (player.spriteIndex < 1088
+                    || (player.spriteIndex > 1139
+                            && (player.spriteIndex < 2373
+                                    || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
+                    || player.imageIndex < 0
+                    || player.imageIndex > 10) {
+                LOG.logger.info(
+                        "Player ID "
+                                + player.id
+                                + " from "
+                                + player.connAddress
+                                + " kicked for invalid visuals ("
+                                + player.spriteIndex
+                                + ","
+                                + player.imageIndex
+                                + ")");
                 sessionManager.kick(player, "Kicked for invalid visuals (may be a bug)");
                 return false;
             }
         }
-        
+
         long now = System.currentTimeMillis();
-        if(player.lastMovePacketTime != -1){
+        if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
-            if(Math.abs(x - player.x) > elapsedFrames * 6f ||
-                Math.abs(y - player.y) > elapsedFrames * 6f) {
-                if(properties.kickBadMovement) {
-                    LOG.logger.info("Player " + player.id + " (" + player.uuid + ") from " + player.connAddress + " kicked for invalid movement");
+            if (Math.abs(x - player.x) > elapsedFrames * 6f
+                    || Math.abs(y - player.y) > elapsedFrames * 6f) {
+                if (properties.kickBadMovement) {
+                    LOG.logger.info(
+                            "Player "
+                                    + player.id
+                                    + " ("
+                                    + player.uuid
+                                    + ") from "
+                                    + player.connAddress
+                                    + " kicked for invalid movement");
                     sessionManager.kick(player, "Kicked for invalid movement (may be a bug)");
                     return false;
-                } 
-                else {
+                } else {
                     this.sendPacket(
-                    		player.connAddress, 
-                    		player.connPort, 
-                    		new PacketBuilder(OutboundPacketType.FORCE_TELEPORT)
-                    			.addFloat(player.x)
-                    			.addFloat(player.y)
-                    );
+                            player.connAddress,
+                            player.connPort,
+                            new PacketBuilder(OutboundPacketType.FORCE_TELEPORT)
+                                    .addFloat(player.x)
+                                    .addFloat(player.y));
                     return true;
                 }
             }
         }
-        
+
         player.spriteIndex = spriteIndex;
         player.imageIndex = imageIndex;
         player.x = x;
@@ -176,53 +206,60 @@ public class GameServer {
 
         return true;
     }
-	
-	public void sendPacket(InetAddress address, int port, PacketBuilder packet) {
-		this.sendPacket(new Packet(address, port, packet.send, packet.getSize()));
-	}
-	public boolean sendPacket(Packet packet) {
-		try {
-			//LOG.logger.info(String.format("Send: %s:%s -> %s", packet.getAddress(), packet.getPort(), Util.stringify(packet.getData(), packet.getLength())));
-			socket.send(packet.getRawPacket());
-		}
-		catch(Exception e) {
-			LOG.logException(e);
-			return false;
-		}
-		return true;
-	}
-	public Future<?> start() {
-		return future = executor.submit(this::run);
-	}
-	public void stop() {
-		if(future != null && !future.isCancelled()) {
-			future.cancel(true);
-			sessionManager.getPlayers().forEach(player -> sessionManager.kick(player, "Server halted"));
-			connectionManager.getConnectedAddresses().forEach(connectionManager::disconnectAll);
-		}
-	}
-	
-	public boolean isRunning() {
-		return future != null && !future.isDone();
-	}
-	
-	private void run() {
-		DatagramPacket packet;
-		
-		while(true) {
-			try {
-				packet = new DatagramPacket(new byte[4096], 4096);
-				socket.receive(packet);
-				
-				connectionManager.cleanup().forEach(sessionManager::releaseAllPlayers);
-				sessionManager.cleanup();
-				
-				//LOG.logger.info(String.format("Recv: %s:%s -> %s", packet.getAddress(), packet.getPort(), Util.stringify(packet.getData(), packet.getLength())));
-				connectionManager.dispatch(new Packet(packet));
-			}
-			catch(Throwable e) {
-				LOG.logException(e);
-			}
-		}
-	}
+
+    public void sendPacket(InetAddress address, int port, PacketBuilder packet) {
+        this.sendPacket(new Packet(address, port, packet.send, packet.getSize()));
+    }
+
+    public boolean sendPacket(Packet packet) {
+        try {
+            // LOG.logger.info(String.format("Send: %s:%s -> %s", packet.getAddress(),
+            // packet.getPort(),
+            // Util.stringify(packet.getData(), packet.getLength())));
+            socket.send(packet.getRawPacket());
+        } catch (Exception e) {
+            LOG.logException(e);
+            return false;
+        }
+        return true;
+    }
+
+    public Future<?> start() {
+        return future = executor.submit(this::run);
+    }
+
+    public void stop() {
+        if (future != null && !future.isCancelled()) {
+            future.cancel(true);
+            sessionManager
+                    .getPlayers()
+                    .forEach(player -> sessionManager.kick(player, "Server halted"));
+            connectionManager.getConnectedAddresses().forEach(connectionManager::disconnectAll);
+        }
+    }
+
+    public boolean isRunning() {
+        return future != null && !future.isDone();
+    }
+
+    private void run() {
+        DatagramPacket packet;
+
+        while (true) {
+            try {
+                packet = new DatagramPacket(new byte[4096], 4096);
+                socket.receive(packet);
+
+                connectionManager.cleanup().forEach(sessionManager::releaseAllPlayers);
+                sessionManager.cleanup();
+
+                // LOG.logger.info(String.format("Recv: %s:%s -> %s", packet.getAddress(),
+                // packet.getPort(),
+                // Util.stringify(packet.getData(), packet.getLength())));
+                connectionManager.dispatch(new Packet(packet));
+            } catch (Throwable e) {
+                LOG.logException(e);
+            }
+        }
+    }
 }
