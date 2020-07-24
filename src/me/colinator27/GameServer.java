@@ -4,7 +4,6 @@ import me.colinator27.packet.*;
 
 import java.net.DatagramPacket;
 import java.net.DatagramSocket;
-import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -163,7 +162,7 @@ public class GameServer {
         if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
             if (Math.abs(x - player.x) > elapsedFrames * 5f || Math.abs(y - player.y) > elapsedFrames * 5f) {
-                if (properties.kickBadMovement) {
+                if (properties.kickInvalidMovement) {
                     LOG.logger.info(
                             "Player "
                                     + player.id

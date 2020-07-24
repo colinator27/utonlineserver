@@ -112,7 +112,7 @@ public class PacketHandler {
                                 case LOGIN:
                                     {
                                         if (server.properties.disallowSameIP
-                                                && sessionManager.getPlayer(owner) != null) {
+                                                && sessionManager.playerFromIPExists(owner.address)) {
                                             LOG.logger.info(
                                                     "Rejected session request from "
                                                             + owner

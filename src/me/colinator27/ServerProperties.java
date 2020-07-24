@@ -5,7 +5,7 @@ public class ServerProperties {
     public final int maxPlayers;
     public final int maxRoomID;
     public final boolean testingMode;
-    public final boolean kickBadMovement;
+    public final boolean kickInvalidMovement;
     public final boolean disallowSameIP;
 
     public ServerProperties(
@@ -19,7 +19,7 @@ public class ServerProperties {
         this.maxPlayers = maxPlayers;
         this.maxRoomID = maxRoomID;
         this.testingMode = testingMode;
-        this.kickBadMovement = kickBadMovement;
+        this.kickInvalidMovement = kickBadMovement;
         this.disallowSameIP = disallowSameIP;
     }
 }

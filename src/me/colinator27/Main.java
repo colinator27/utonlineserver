@@ -46,7 +46,7 @@ public class Main {
 
         // Kick bad movement packets rather than teleporting backward
         // (highly recommended to be false)
-        properties.setProperty("kick-bad-movement", "false");
+        properties.setProperty("kick-invalid-movement", "false");
 
         // Whether to disallow more than one connection at a time from an IP
         // (recommended to be false)
@@ -123,11 +123,11 @@ public class Main {
                         .map(Boolean::parseBoolean)
                         .collect(Collectors.toList());
         assert testingMode.size() == count;
-        List<Boolean> kickBadMovement =
-                Arrays.stream(properties.getProperty("kick-bad-movement").split(","))
+        List<Boolean> kickInvalidMovement =
+                Arrays.stream(properties.getProperty("kick-invalid-movement").split(","))
                         .map(Boolean::parseBoolean)
                         .collect(Collectors.toList());
-        assert kickBadMovement.size() == count;
+        assert kickInvalidMovement.size() == count;
         List<Boolean> disallowSameIP =
                 Arrays.stream(properties.getProperty("disallow-same-ip").split(","))
                         .map(Boolean::parseBoolean)
@@ -141,7 +141,7 @@ public class Main {
                                     maxPlayers.get(i),
                                     maxRoomIDs.get(i),
                                     testingMode.get(i),
-                                    kickBadMovement.get(i),
+                                    kickInvalidMovement.get(i),
                                     disallowSameIP.get(i))));
         servers.forEach(GameServer::start);
         // Wait for all of the servers to stop

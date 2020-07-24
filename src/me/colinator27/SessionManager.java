@@ -4,6 +4,7 @@ import me.colinator27.packet.Connection;
 import me.colinator27.packet.OutboundPacketType;
 import me.colinator27.packet.PacketBuilder;
 
+import java.net.InetAddress;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -95,6 +96,14 @@ public class SessionManager {
 
     public GamePlayer getPlayer(UUID uuid) {
         return sessions.get(uuid);
+    }
+
+    public boolean playerFromIPExists(InetAddress address) {
+        for (Connection c : connections.keySet()) {
+            if (c.address.equals(address))
+                return true;
+        }
+        return false;
     }
 
     public void kick(GamePlayer player, String reason) {
