@@ -1,4 +1,4 @@
-package me.colinator27;
+package me.colinator27.packet;
 
 /**
  * The various outbound (to client) packet types
@@ -12,6 +12,7 @@ public enum OutboundPacketType
     PLAYER_LEAVE_ROOM((byte)11),
     PLAYER_VISUAL_UPDATE((byte)12),
 
+    RATELIMIT_WARNING((byte)253),
     FORCE_TELEPORT((byte)254),
     KICK_MESSAGE((byte)255);
 

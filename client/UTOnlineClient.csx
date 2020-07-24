@@ -341,6 +341,9 @@ switch (buffer_read(buff, buffer_u8))
 			}
 		}
 		break;
+	case 253: // Show ratelimit warning
+		show_message_async(""You are being ratelimited!"");
+		break;
 	case 254: // Reset position (due to lag/anticheat)
 		if (size < 5+4+4 || obj_uto_client.state != 1) return;
 		if (instance_exists(obj_mainchara))

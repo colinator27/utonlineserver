@@ -24,6 +24,18 @@ public class Log
         this.type = type;
         instantiateLogger();
     }
+    
+    /**
+     * Helper method to log exceptions
+     * @param throwable exception
+     */
+    public void logException(Throwable throwable) {
+    	if(throwable == null) return;
+    	logger.severe(throwable.toString());
+    	for(Object element : throwable.getStackTrace()) {
+    		logger.severe("at " + element);
+    	}
+    }
 
     /**
      * Sets up the handlers and Java Logger for logging.
