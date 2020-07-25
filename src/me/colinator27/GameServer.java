@@ -69,7 +69,7 @@ public class GameServer {
         if (this.isValidRoom(room)) {
             long now = System.currentTimeMillis();
 
-            if (player.lastRoomChangeTime > -1 && now - player.lastRoomChangeTime < 200) {
+            if (player.lastRoomChangeTime != -1 && now - player.lastRoomChangeTime < properties.minRoomChange) {
                 sessionManager.kick(player, "You are changing rooms too fast!");
                 return;
             }
@@ -140,7 +140,7 @@ public class GameServer {
      * @return true if not kicked, false if kicked
      */
     public boolean validatePlayerVisuals(GamePlayer player, int spriteIndex, int imageIndex, float x, float y) {
-        if (!properties.testingMode) {
+        if (properties.verifyVisuals) {
             if (player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
                 || player.imageIndex < 0 || player.imageIndex > 10) {
                 LOG.logger.info(

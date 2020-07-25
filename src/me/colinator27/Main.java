@@ -41,8 +41,11 @@ public class Main {
         // Max room IDs for the servers
         properties.setProperty("max-room-id", "335");
 
-        // Testing mode (set to true if not for Undertale specifically)
-        properties.setProperty("testing-mode", "false");
+        // Minimum time (in ms) between room changes
+        properties.setProperty("min-room-change", "200");
+
+        // Whether to verify visuals (sprites, etc., excluding movement)
+        properties.setProperty("verify-visuals", "true");
 
         // Kick bad movement packets rather than teleporting backward
         // (highly recommended to be false)
@@ -118,11 +121,16 @@ public class Main {
                         .map(Integer::parseInt)
                         .collect(Collectors.toList());
         assert maxRoomIDs.size() == count;
-        List<Boolean> testingMode =
-                Arrays.stream(properties.getProperty("testing-mode").split(","))
+        List<Integer> minRoomChanges =
+                Arrays.stream(properties.getProperty("min-room-change").split(","))
+                        .map(Integer::parseInt)
+                        .collect(Collectors.toList());
+        assert minRoomChanges.size() == count;
+        List<Boolean> verifyVisuals =
+                Arrays.stream(properties.getProperty("verify-visuals").split(","))
                         .map(Boolean::parseBoolean)
                         .collect(Collectors.toList());
-        assert testingMode.size() == count;
+        assert verifyVisuals.size() == count;
         List<Boolean> kickInvalidMovement =
                 Arrays.stream(properties.getProperty("kick-invalid-movement").split(","))
                         .map(Boolean::parseBoolean)
@@ -140,7 +148,8 @@ public class Main {
                                     ports.get(i),
                                     maxPlayers.get(i),
                                     maxRoomIDs.get(i),
-                                    testingMode.get(i),
+                                    minRoomChanges.get(i),
+                                    verifyVisuals.get(i),
                                     kickInvalidMovement.get(i),
                                     disallowSameIP.get(i))));
         servers.forEach(GameServer::start);

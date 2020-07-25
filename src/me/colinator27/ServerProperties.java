@@ -4,7 +4,8 @@ public class ServerProperties {
     public final int port;
     public final int maxPlayers;
     public final int maxRoomID;
-    public final boolean testingMode;
+    public final int minRoomChange;
+    public final boolean verifyVisuals;
     public final boolean kickInvalidMovement;
     public final boolean disallowSameIP;
 
@@ -12,13 +13,15 @@ public class ServerProperties {
             int port,
             int maxPlayers,
             int maxRoomID,
-            boolean testingMode,
+            int minRoomChange,
+            boolean verifyVisuals,
             boolean kickBadMovement,
             boolean disallowSameIP) {
         this.port = port;
         this.maxPlayers = maxPlayers;
         this.maxRoomID = maxRoomID;
-        this.testingMode = testingMode;
+        this.minRoomChange = minRoomChange;
+        this.verifyVisuals = verifyVisuals;
         this.kickInvalidMovement = kickBadMovement;
         this.disallowSameIP = disallowSameIP;
     }

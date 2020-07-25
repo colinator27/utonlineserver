@@ -110,112 +110,104 @@ public class PacketHandler {
                         try {
                             switch (reader.parseType()) {
                                 case LOGIN:
-                                    {
-                                        if (server.properties.disallowSameIP
-                                                && sessionManager.playerFromIPExists(owner.address)) {
-                                            LOG.logger.info(
-                                                    "Rejected session request from "
-                                                            + owner
-                                                            + " (same IPs disallowed)");
-                                            continue;
-                                        }
-                                        player = sessionManager.createPlayer(owner);
-                                        if (player == null) {
-                                            LOG.logger.info(
-                                                    "Rejected session request from "
-                                                            + owner
-                                                            + " (server is full)");
-                                            server.sendPacket(
-                                                    owner,
-                                                    new PacketBuilder(OutboundPacketType.KICK_MESSAGE, send)
-                                                            .addString(
-                                                                    "Cannot join this server; it"
-                                                                        + " is at a maximum"
-                                                                        + " capacity of "
-                                                                            + server.properties
-                                                                                    .maxPlayers
-                                                                            + " players."));
-                                            continue;
-                                        }
+                                    if (server.properties.disallowSameIP
+                                            && sessionManager.playerFromIPExists(owner.address)) {
                                         LOG.logger.info(
-                                                String.format(
-                                                        "Created session for %s (id = %d, uuid"
-                                                            + " = %s)",
-                                                        owner,
-                                                        player.id,
-                                                        player.uuid));
+                                                "Rejected session request from "
+                                                        + owner
+                                                        + " (same IPs disallowed)");
+                                        continue;
+                                    }
+                                    player = sessionManager.createPlayer(owner);
+                                    if (player == null) {
+                                        LOG.logger.info(
+                                                "Rejected session request from "
+                                                        + owner
+                                                        + " (server is full)");
                                         server.sendPacket(
                                                 owner,
-                                                new PacketBuilder(OutboundPacketType.SESSION, send)
-                                                        .addInt(player.id)
-                                                        .addUUID(player.uuid));
+                                                new PacketBuilder(OutboundPacketType.KICK_MESSAGE, send)
+                                                        .addString(
+                                                                "Cannot join this server; it"
+                                                                    + " is at a maximum"
+                                                                    + " capacity of "
+                                                                        + server.properties
+                                                                                .maxPlayers
+                                                                        + " players."));
+                                        continue;
                                     }
+                                    LOG.logger.info(
+                                            String.format(
+                                                    "Created session for %s (id = %d, uuid"
+                                                        + " = %s)",
+                                                    owner,
+                                                    player.id,
+                                                    player.uuid));
+                                    server.sendPacket(
+                                            owner,
+                                            new PacketBuilder(OutboundPacketType.SESSION, send)
+                                                    .addInt(player.id)
+                                                    .addUUID(player.uuid));
                                     break;
                                 case HEARTBEAT:
-                                    {
-                                        uuid = reader.getUUID();
-                                        player = sessionManager.getPlayer(uuid);
+                                    uuid = reader.getUUID();
+                                    player = sessionManager.getPlayer(uuid);
 
-                                        if (player != null) {
-                                            player.connection = owner; // todo: this may be unnecessary? owner would have to change first
+                                    if (player != null) {
+                                        player.connection = owner; // todo: this may be unnecessary? owner would have to change first
 
-                                            player.lastPacketTime = System.currentTimeMillis();
-                                            server.sendPacket(owner, new PacketBuilder(OutboundPacketType.HEARTBEAT, send));
-                                        }
+                                        player.lastPacketTime = System.currentTimeMillis();
+                                        server.sendPacket(owner, new PacketBuilder(OutboundPacketType.HEARTBEAT, send));
                                     }
                                     break;
                                 case PLAYER_CHANGE_ROOM:
-                                    {
-                                        uuid = reader.getUUID();
-                                        player = sessionManager.getPlayer(uuid);
+                                    uuid = reader.getUUID();
+                                    player = sessionManager.getPlayer(uuid);
 
-                                        if (player != null) {
-                                            room = reader.getShort();
+                                    if (player != null) {
+                                        room = reader.getShort();
 
-                                            spriteIndex = reader.getShort();
-                                            imageIndex = reader.getShort();
-                                            x = reader.getFloat();
-                                            y = reader.getFloat();
+                                        spriteIndex = reader.getShort();
+                                        imageIndex = reader.getShort();
+                                        x = reader.getFloat();
+                                        y = reader.getFloat();
 
-                                            player.lastMovePacketTime = -1;
-                                            player.lastPacketTime = System.currentTimeMillis();
-                                            if (server.validatePlayerVisuals(
-                                                    player, spriteIndex, imageIndex, x, y)) {
-                                                server.addPlayerToRoom(player, room);
-                                            }
+                                        player.lastMovePacketTime = -1;
+                                        player.lastPacketTime = System.currentTimeMillis();
+                                        if (server.validatePlayerVisuals(
+                                                player, spriteIndex, imageIndex, x, y)) {
+                                            server.addPlayerToRoom(player, room);
                                         }
                                     }
                                     break;
                                 case PLAYER_VISUAL_UPDATE:
-                                    {
-                                        uuid = reader.getUUID();
-                                        player = sessionManager.getPlayer(uuid);
+                                    uuid = reader.getUUID();
+                                    player = sessionManager.getPlayer(uuid);
 
-                                        if (player != null) {
-                                            spriteIndex = reader.getShort();
-                                            imageIndex = reader.getShort();
-                                            x = reader.getFloat();
-                                            y = reader.getFloat();
+                                    if (player != null) {
+                                        spriteIndex = reader.getShort();
+                                        imageIndex = reader.getShort();
+                                        x = reader.getFloat();
+                                        y = reader.getFloat();
 
-                                            player.lastPacketTime = now;
-                                            if (server.validatePlayerVisuals(player, spriteIndex, imageIndex, x, y) && player.room != -1) {
-                                                builder = new PacketBuilder(OutboundPacketType.PLAYER_VISUAL_UPDATE, send)
-                                                                .addLong(now)
-                                                                .addInt(player.room)
-                                                                .addInt(player.id)
-                                                                .addShort((short) spriteIndex)
-                                                                .addShort((short) imageIndex)
-                                                                .addFloat(x)
-                                                                .addFloat(y);
+                                        player.lastPacketTime = now;
+                                        if (server.validatePlayerVisuals(player, spriteIndex, imageIndex, x, y) && player.room != -1) {
+                                            builder = new PacketBuilder(OutboundPacketType.PLAYER_VISUAL_UPDATE, send)
+                                                            .addLong(now)
+                                                            .addInt(player.room)
+                                                            .addInt(player.id)
+                                                            .addShort((short) spriteIndex)
+                                                            .addShort((short) imageIndex)
+                                                            .addFloat(x)
+                                                            .addFloat(y);
 
-                                                for (GamePlayer other :
-                                                        server.getPlayersInRoom(player.room)) {
-                                                    if (other == player) continue;
-                                                    server.sendPacket(other.connection, builder);
-                                                }
+                                            for (GamePlayer other :
+                                                    server.getPlayersInRoom(player.room)) {
+                                                if (other == player) continue;
+                                                server.sendPacket(other.connection, builder);
                                             }
-                                            player.lastMovePacketTime = now;
                                         }
+                                        player.lastMovePacketTime = now;
                                     }
                                     break;
                             }
