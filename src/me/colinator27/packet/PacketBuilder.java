@@ -2,6 +2,7 @@ package me.colinator27.packet;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.nio.charset.Charset;
 import java.util.Arrays;
 import java.util.UUID;
 
@@ -12,7 +13,6 @@ public class PacketBuilder {
 
     /** The offset of the packet header plus type */
     public static final int SEND_OFFSET = 5;
-
     /**
      * Fills the send buffer with the standard packet header bytes
      *
@@ -128,7 +128,7 @@ public class PacketBuilder {
      * @return this PacketBuilder
      */
     public PacketBuilder addString(String val) {
-        byte[] buff = val.getBytes();
+        byte[] buff = val.getBytes(Charset.forName("UTF-8"));
         System.arraycopy(buff, 0, send, offset, buff.length);
         send[buff.length + offset] = 0;
         offset += buff.length + 1;

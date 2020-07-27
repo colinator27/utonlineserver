@@ -18,4 +18,11 @@ public enum OutboundPacketType {
     OutboundPacketType(byte id) {
         this.id = id;
     }
+    
+    public static OutboundPacketType fromValue(byte id) {
+    	for(OutboundPacketType type : values()) {
+    		if(type.id == id) return type;
+    	}
+    	throw new IllegalArgumentException("no packet type with id " + id);
+    }
 }

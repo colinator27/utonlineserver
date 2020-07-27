@@ -3,12 +3,20 @@ package me.colinator27.packet;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.Arrays;
+import java.util.LinkedHashMap;
+import java.util.Map;
 import java.util.UUID;
+
+import me.colinator27.Pair;
+import me.colinator27.Util;
 
 /** Helper class to parse packet receive buffers */
 public class PacketReader {
     private ByteBuffer bb;
     private byte[] data;
+    
+    private boolean validated;
+    private String str;
 
     /**
      * Initializes a PacketReader, wrapping around a receive buffer
@@ -22,6 +30,7 @@ public class PacketReader {
     }
 
     public boolean validate() {
+    	if(validated) return true;
         if (data.length < 5) return false;
         if (!parseHeader()) return false;
 
@@ -29,41 +38,52 @@ public class PacketReader {
 
         try {
             InboundPacketType type = parseType();
+            StringBuilder sb = new StringBuilder();
+            Map<String, Object> args = new LinkedHashMap<>();
+            sb.append(type);
+            sb.append(" ");
+            
             switch (type) {
                 case HEARTBEAT:
                     {
-                        getUUID();
+                        args.put("uuid", getUUID());
                     }
                     break;
                 case LOGIN:
                     {
                         bb.reset();
                     }
-                    return data.length == 6;
+                    break;
                 case PLAYER_CHANGE_ROOM:
                     {
-                        getShort();
-                        getShort();
-                        getShort();
-                        getFloat();
-                        getFloat();
+                    	args.put("uuid", getUUID());
+                    	args.put("room", getShort());
+                        args.put("sprite", getShort());
+                        args.put("frame", getShort());
+                        args.put("coords", new Pair<Float, Float>(getFloat(), getFloat()));
                     }
                     break;
                 case PLAYER_VISUAL_UPDATE:
                     {
-                        getShort();
-                        getShort();
-                        getFloat();
-                        getFloat();
+                    	args.put("uuid", getUUID());
+                        args.put("sprite", getShort());
+                        args.put("frame", getShort());
+                        args.put("coords", new Pair<Float, Float>(getFloat(), getFloat()));
                     }
                     break;
                 default:
-                    return false;
+                	{
+                		byte[] contents = Arrays.copyOfRange(data, 4, data.length);
+                		args.put("contents", Util.stringify(contents, contents.length));
+                	}
             }
+            sb.append(args.entrySet());
+            str = sb.toString();
             bb.reset();
         } catch (Throwable e) {
             return false;
         }
+        validated = true;
         return true;
     }
 
@@ -125,5 +145,15 @@ public class PacketReader {
         long mostSignificantBits = bb.getLong();
         long leastSignificantBits = bb.getLong();
         return new UUID(mostSignificantBits, leastSignificantBits);
+    }
+    
+    @Override
+    public String toString() {
+    	if(str == null) {
+    		if(!this.validate()) {
+    			str = Util.stringify(data, data.length);
+    		}
+    	}
+    	return str;
     }
 }
