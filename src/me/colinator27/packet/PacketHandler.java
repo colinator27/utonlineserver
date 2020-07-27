@@ -124,7 +124,7 @@ public class PacketHandler {
                                             	sessionManager.kick(player, "Only one player is allowed per connection");
                                             	break;
                                             }
-                                            player = sessionManager.createPlayer(owner);
+                                            player = sessionManager.createPlayer(owner, this);
                                             if (player == null) {
                                                 LOG.logger.info(
                                                         "Rejected session request from "
@@ -209,7 +209,7 @@ public class PacketHandler {
                                                     for (GamePlayer other :
                                                             server.getPlayersInRoom(player.room)) {
                                                         if (other == player) continue;
-                                                        this.sendPacket(builder);
+                                                        other.handler.sendPacket(builder);
                                                     }
                                                 }
                                                 player.lastMovePacketTime = now;

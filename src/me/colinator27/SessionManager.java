@@ -2,6 +2,7 @@ package me.colinator27;
 
 import me.colinator27.packet.OutboundPacketType;
 import me.colinator27.packet.PacketBuilder;
+import me.colinator27.packet.PacketHandler;
 
 import java.io.IOException;
 import java.net.InetAddress;
@@ -40,7 +41,7 @@ public class SessionManager {
         return new ArrayList<>(sessions.values());
     }
 
-    public GamePlayer createPlayer(Socket socket) {
+    public GamePlayer createPlayer(Socket socket, PacketHandler handler) {
         if (playerIDs.size() >= server.properties.maxPlayers) {
             return null;
         }
@@ -50,7 +51,7 @@ public class SessionManager {
         playerIDs.add(id);
 
         UUID uuid = UUID.randomUUID();
-        GamePlayer player = new GamePlayer(socket, uuid, id);
+        GamePlayer player = new GamePlayer(socket, handler, uuid, id);
 
         connections.put(socket.getRemoteSocketAddress(), uuid);
         addresses.add(socket.getInetAddress());

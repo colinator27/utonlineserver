@@ -43,12 +43,14 @@ public class GamePlayer {
     /**
      * Initialize a new player object
      *
-     * @param connection the current connection of the player
+     * @param socket the socket of the player connection
+     * @param handler the packet handler for the connection
+     * @param uuid the private UUID of the player
      * @param id the public ID of the player
-     * @param now the current time, aka when the login packet was processed
      */
-    public GamePlayer(Socket socket, UUID uuid, int id) {
+    public GamePlayer(Socket socket, PacketHandler handler, UUID uuid, int id) {
         this.socket = socket;
+        this.handler = handler;
         this.uuid = uuid;
         this.id = id;
     }
