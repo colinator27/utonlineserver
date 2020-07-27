@@ -66,7 +66,7 @@ public class GameServer {
     }
 
     public void addPlayerToRoom(GamePlayer player, int room) {
-        if (this.isValidRoom(room)) {
+        if (this.isValidRoom(room) && player.room != room) {
             long now = System.currentTimeMillis();
 
             if (player.lastRoomChangeTime > -1 && now - player.lastRoomChangeTime < 200) {
