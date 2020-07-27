@@ -2,6 +2,7 @@ package me.colinator27.packet;
 
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
+import java.util.Arrays;
 import java.util.UUID;
 
 /** Helper class to fill packet send buffers with data */
@@ -34,17 +35,13 @@ public class PacketBuilder {
      * @param type the type of packet to send
      * @param send the send buffer to fill
      */
-    public PacketBuilder(OutboundPacketType type, byte[] send) {
+    public PacketBuilder(OutboundPacketType type) {
+    	this.send = new byte[4096];
         PacketBuilder.fillHeader(send);
-        this.send = send;
         bb = ByteBuffer.wrap(send);
         bb.order(ByteOrder.LITTLE_ENDIAN);
         send[4] = type.id;
         this.offset = SEND_OFFSET;
-    }
-
-    public PacketBuilder(OutboundPacketType type) {
-        this(type, new byte[4096]);
     }
 
     /** @return the size of the packet data, including the header and type (SEND_OFFSET) */
@@ -146,5 +143,15 @@ public class PacketBuilder {
      */
     public PacketBuilder addUUID(UUID val) {
         return addLong(val.getMostSignificantBits()).addLong(val.getLeastSignificantBits());
+    }
+    
+    /**
+     * Builds and returns the packet in its current state
+     *
+     * @return bytes the raw bytes of the constructed packet
+     */
+    
+    public byte[] build() {
+    	return Arrays.copyOfRange(send, 0, offset);
     }
 }

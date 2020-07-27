@@ -1,9 +1,9 @@
 package me.colinator27;
 
-import me.colinator27.packet.Connection;
-
-import java.net.InetAddress;
+import java.net.Socket;
 import java.util.UUID;
+
+import me.colinator27.packet.PacketHandler;
 
 /** Data for individual sessions/players */
 public class GamePlayer {
@@ -15,9 +15,6 @@ public class GamePlayer {
 
     /** The last time (in ms) of a move packet from this player being processed */
     public long lastMovePacketTime = -1;
-
-    /** The last time (in ms) of any packet from this player being processed */
-    public long lastPacketTime;
 
     /** The last time (in ms) of a change room packet from this player being processed */
     public long lastRoomChangeTime = -1;
@@ -38,7 +35,10 @@ public class GamePlayer {
     public float y = 0f;
 
     /** The current connection of the player */
-    public Connection connection;
+    public Socket socket;
+    
+    /** The {@link PacketHander} associate with this player */
+    public PacketHandler handler;
 
     /**
      * Initialize a new player object
@@ -47,11 +47,9 @@ public class GamePlayer {
      * @param id the public ID of the player
      * @param now the current time, aka when the login packet was processed
      */
-    public GamePlayer(Connection connection, UUID uuid, int id, long now) {
-        this.connection = connection;
+    public GamePlayer(Socket socket, UUID uuid, int id) {
+        this.socket = socket;
         this.uuid = uuid;
         this.id = id;
-
-        lastPacketTime = now;
     }
 }

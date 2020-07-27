@@ -73,6 +73,7 @@ public class PacketReader {
      * @return true if valid, false otherwise
      */
     public boolean parseHeader() {
+    	if (bb.capacity() < 5) return false;
         if (bb.get() != 'U') return false;
         if (bb.get() != 'T') return false;
         if (bb.get() != 'O') return false;

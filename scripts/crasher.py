@@ -10,8 +10,10 @@ packet_types = [
     ("PLAYER_VISUAL_UPDATE",0x0b,12),
 ]
 
-sock = socket(AF_INET, SOCK_DGRAM)
+sock = socket(AF_INET, SOCK_STREAM)
 addr = ("127.0.0.1", 1337)
+
+sock.connect(addr)
 
 delay = 0
 
@@ -23,7 +25,12 @@ while True:
     data += urandom(arg_length)
     data += '\x00'.encode()
     print("Packet", ("\\x%02x"*len(data))%tuple(data))
-    sock.sendto(data, addr)
+    try:
+        sock.sendall(data)
+    except:
+        sock.close()
+        sock = socket(AF_INET, SOCK_STREAM)
+        sock.connect(addr)
 
     if delay > 0:
         sleep(delay)

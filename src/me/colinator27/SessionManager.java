@@ -1,30 +1,34 @@
 package me.colinator27;
 
-import me.colinator27.packet.Connection;
 import me.colinator27.packet.OutboundPacketType;
 import me.colinator27.packet.PacketBuilder;
 
+import java.io.IOException;
 import java.net.InetAddress;
+import java.net.Socket;
+import java.net.SocketAddress;
 import java.util.ArrayList;
 import java.util.Collections;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
 import java.util.UUID;
 import java.util.concurrent.ConcurrentHashMap;
-import java.util.stream.Collectors;
 
 public class SessionManager {
 
     private GameServer server;
+    private Set<InetAddress> addresses;
     private Map<UUID, GamePlayer> sessions;
-    private Map<Connection, UUID> connections;
+    private Map<SocketAddress, UUID> connections;
 
     private Set<Integer> playerIDs;
     private Log LOG;
 
     public SessionManager(GameServer server) {
         this.connections = new ConcurrentHashMap<>();
+        this.addresses = new HashSet<>();
         this.playerIDs = Collections.newSetFromMap(new ConcurrentHashMap<>());
         this.sessions = new ConcurrentHashMap<>();
         this.server = server;
@@ -32,43 +36,31 @@ public class SessionManager {
         this.LOG = server.LOG;
     }
 
-    public void cleanup() {
-        long now = System.currentTimeMillis();
-
-        // I can't just for-each this in the stream as it will throw a
-        // ConcurrentModificationException
-        List<GamePlayer> dead =
-                sessions.values().stream()
-                        .filter(player -> now - player.lastPacketTime > 4000)
-                        .collect(Collectors.toList());
-        dead.forEach(this::releasePlayer);
-    }
-
     public List<GamePlayer> getPlayers() {
         return new ArrayList<>(sessions.values());
     }
 
-    public GamePlayer createPlayer(Connection connection) {
-        if (playerIDs.size() == server.properties.maxPlayers) {
+    public GamePlayer createPlayer(Socket socket) {
+        if (playerIDs.size() >= server.properties.maxPlayers) {
             return null;
         }
         int id;
-        for (id = 0; id < server.properties.maxPlayers && playerIDs.contains(id); id++)
-            ;
+        for (id = 0; id < server.properties.maxPlayers && playerIDs.contains(id); id++);
 
         playerIDs.add(id);
 
         UUID uuid = UUID.randomUUID();
-        GamePlayer player = new GamePlayer(connection, uuid, id, System.currentTimeMillis());
+        GamePlayer player = new GamePlayer(socket, uuid, id);
 
-        connections.put(connection, uuid);
+        connections.put(socket.getRemoteSocketAddress(), uuid);
+        addresses.add(socket.getInetAddress());
         sessions.put(uuid, player);
 
         return player;
     }
 
-    public void releasePlayer(Connection connection) {
-        this.releasePlayer(connections.get(connection));
+    public void releasePlayer(SocketAddress address) {
+        this.releasePlayer(connections.get(address));
     }
 
     public void releasePlayer(GamePlayer player) {
@@ -86,11 +78,12 @@ public class SessionManager {
         sessions.remove(uuid);
 
         server.removePlayerFromRoom(player, player.room);
+        addresses.remove(player.socket.getInetAddress());
     }
 
-    public GamePlayer getPlayer(Connection connection) {
-        return connections.containsKey(connection)
-                ? sessions.get(connections.get(connection))
+    public GamePlayer getPlayer(SocketAddress address) {
+        return connections.containsKey(address)
+                ? sessions.get(connections.get(address))
                 : null;
     }
 
@@ -99,17 +92,20 @@ public class SessionManager {
     }
 
     public boolean playerFromIPExists(InetAddress address) {
-        for (Connection c : connections.keySet()) {
-            if (c.address.equals(address))
-                return true;
-        }
-        return false;
+    	return addresses.contains(address);
     }
 
     public void kick(GamePlayer player, String reason) {
         this.releasePlayer(player);
-
-        server.sendPacket(player.connection, new PacketBuilder(OutboundPacketType.KICK_MESSAGE).addString(reason));
+        
+        if(player.handler != null) {
+        	player.handler.sendPacket(new PacketBuilder(OutboundPacketType.KICK_MESSAGE).addString(reason));
+        	player.handler.stop();
+        }
+        try {
+        	player.socket.close();
+        }
+        catch(IOException e) {}
     }
 
     public void kick(UUID uuid, String reason) {
