@@ -54,4 +54,14 @@ public class GamePlayer {
         this.uuid = uuid;
         this.id = id;
     }
+    
+    @Override
+    public String toString() {
+    	return String.format(
+    			"Player %d (%s) @ %s", 
+    			id,
+    			uuid,
+    			socket.getRemoteSocketAddress()
+    	);
+    }
 }

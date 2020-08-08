@@ -143,12 +143,8 @@ public class GameServer {
         if (!properties.testingMode) {
             if (player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
                 || player.imageIndex < 0 || player.imageIndex > 10) {
-                LOG.logger.info(
-                        "Player ID "
-                                + player.id
-                                + " from "
-                                + player.socket.getRemoteSocketAddress()
-                                + " kicked for invalid visuals ("
+                LOG.logger.info(player 
+                				+ " kicked for invalid visuals ("
                                 + player.spriteIndex
                                 + ","
                                 + player.imageIndex
@@ -157,20 +153,19 @@ public class GameServer {
                 return false;
             }
         }
+        
+        if(Float.isNaN(x) || Float.isNaN(y) || Float.isInfinite(x) || Float.isInfinite(y)) {
+        	LOG.logger.info(player + " kicked for invalid coordinates");
+        	sessionManager.kick(player, "Invalid coordinates: (" + x + ", " + y + ")");
+        	return false;
+        }
 
         long now = System.currentTimeMillis();
         if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
             if (Math.abs(x - player.x) > elapsedFrames * 5f || Math.abs(y - player.y) > elapsedFrames * 5f) {
                 if (properties.kickInvalidMovement) {
-                    LOG.logger.info(
-                            "Player "
-                                    + player.id
-                                    + " ("
-                                    + player.uuid
-                                    + ") from "
-                                    + player.socket.getRemoteSocketAddress()
-                                    + " kicked for invalid movement");
+                    LOG.logger.info(player + " kicked for invalid movement");
                     sessionManager.kick(player, "Kicked for invalid movement (may be a bug)");
                     return false;
                 } else {

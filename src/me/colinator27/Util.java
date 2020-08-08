@@ -3,7 +3,7 @@ package me.colinator27;
 import java.io.File;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
-import java.nio.CharBuffer;
+import java.nio.charset.Charset;
 import java.util.ArrayList;
 import java.util.Arrays;
 import java.util.LinkedHashMap;
@@ -71,12 +71,7 @@ public class Util {
     		case HEARTBEAT:
     			break;
     		case KICK_MESSAGE: {
-    			StringBuilder message = new StringBuilder();
-    			CharBuffer chars = reader.asCharBuffer();
-    			while(chars.hasRemaining()) {
-    				message.append(chars.get());
-    			}
-    			args.put("message", message);
+    			args.put("message", new String(Arrays.copyOfRange(bytes, 5, len-1), Charset.forName("utf-8")));
     		} break;
     		case PLAYER_JOIN_ROOM: {
     			int room = reader.getInt();

@@ -6,8 +6,6 @@ import me.colinator27.Log;
 import me.colinator27.SessionManager;
 import me.colinator27.Util;
 
-import java.io.BufferedInputStream;
-import java.io.BufferedOutputStream;
 import java.io.IOException;
 import java.io.InputStream;
 import java.io.OutputStream;
@@ -50,8 +48,8 @@ public class PacketHandler {
             return;
         }
         try {
-        	output = new BufferedOutputStream(owner.getOutputStream());
-        	input = new BufferedInputStream(owner.getInputStream());
+        	output = owner.getOutputStream();
+        	input = owner.getInputStream();
         }
         catch(IOException e) {
         	LOG.logException(e);
