@@ -105,7 +105,7 @@ public class PacketHandler {
                                 continue;
                             }
                             
-                            if(server.properties.testingMode) {
+                            if(server.properties.debugMode) {
                             	LOG.logger.info(String.format("Recv %s:%d - %s", owner.getInetAddress(), owner.getPort(), reader));
                             }
 
@@ -257,7 +257,7 @@ public class PacketHandler {
     }
     public boolean sendPacket(byte[] bytes, int len) {
     	try {
-    		if(server.properties.testingMode) {
+    		if(server.properties.debugMode) {
     			LOG.logger.info(String.format("Send %s:%d - %s", owner.getInetAddress(), owner.getPort(), Util.stringifyServerPacket(bytes, len)));
     		}
     		output.write(bytes, 0, len);
