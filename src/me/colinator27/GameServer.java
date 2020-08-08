@@ -163,7 +163,7 @@ public class GameServer {
         long now = System.currentTimeMillis();
         if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
-            if (Math.abs(x - player.x) > elapsedFrames * 5f || Math.abs(y - player.y) > elapsedFrames * 5f) {
+            if (Math.sqrt(Math.pow(x - player.x, 2) + Math.pow(y - player.y, 2)) > properties.maxSpeed * elapsedFrames) {
                 if (properties.kickInvalidMovement) {
                     LOG.logger.info(player + " kicked for invalid movement");
                     sessionManager.kick(player, "Kicked for invalid movement (may be a bug)");

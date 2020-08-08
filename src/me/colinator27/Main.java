@@ -43,6 +43,10 @@ public class Main {
 
         // Minimum time (in ms) between room changes
         properties.setProperty("min-room-change", "200");
+
+        // Maximum allowable player speed per frame (30FPS)
+        // Floating point
+        properties.setProperty("max-speed", "10");
         
         // Log packet data
         properties.setProperty("debug-mode", "false");
@@ -129,6 +133,11 @@ public class Main {
                         .map(Integer::parseInt)
                         .collect(Collectors.toList());
         assert minRoomChanges.size() == count;
+        List<Float> maxSpeed =
+                Arrays.stream(properties.getProperty("max-speed").split(","))
+                        .map(Float::parseFloat)
+                        .collect(Collectors.toList());
+        assert maxSpeed.size() == count;
         List<Boolean> debugMode =
                 Arrays.stream(properties.getProperty("debug-mode").split(","))
                         .map(Boolean::parseBoolean)
@@ -157,6 +166,7 @@ public class Main {
                                     maxPlayers.get(i),
                                     maxRoomIDs.get(i),
                                     minRoomChanges.get(i),
+                                    maxSpeed.get(i),
                                     
                                     debugMode.get(i),
                                     verifyVisuals.get(i),
