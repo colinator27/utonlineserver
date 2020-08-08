@@ -3,62 +3,83 @@ package me.colinator27.packet;
 import me.colinator27.GameServer;
 import me.colinator27.Log;
 
+import java.io.IOException;
+import java.net.InetAddress;
+import java.net.Socket;
 import java.util.ArrayList;
-import java.util.HashMap;
+import java.util.HashSet;
 import java.util.List;
 import java.util.Map;
 import java.util.Set;
-import java.util.stream.Collectors;
+import java.util.concurrent.ConcurrentHashMap;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ScheduledExecutorService;
+import java.util.concurrent.TimeUnit;
 
 public class ConnectionManager {
+	
+	private ScheduledExecutorService cleanupService;
 
-    private Map<Connection, PacketHandler> handlers;
-    private Map<Connection, Long> lastPackets;
+    private Map<Socket, PacketHandler> handlers;
     private GameServer server;
+    
     private Log LOG;
 
     public ConnectionManager(GameServer server) {
-        this.lastPackets = new HashMap<>();
-        this.handlers = new HashMap<>();
+    	this.cleanupService = Executors.newSingleThreadScheduledExecutor();
+        this.handlers = new ConcurrentHashMap<>();
         this.server = server;
-
+        
         this.LOG = server.LOG;
+        
+        cleanupService.scheduleAtFixedRate(() -> {
+        	Set<Socket> dead = new HashSet<>();
+        	for(Socket socket : handlers.keySet()) {
+        		if(socket.isClosed() || !socket.isConnected()) {
+        			dead.add(socket);
+        		}
+        	}
+        	for(Socket socket :dead) {
+        		handlers.remove(socket);
+        		try {
+        			socket.close();
+        		}
+        		catch(IOException e) {
+        			LOG.logException(e);
+        		}
+        	}
+        }, 1, 1, TimeUnit.SECONDS);
     }
 
-    public Set<Connection> cleanup() {
-        final long time = System.currentTimeMillis();
-        Set<Connection> out =
-                handlers.keySet().stream()
-                        .filter(handler -> time - lastPackets.get(handler) > 4000)
-                        .collect(Collectors.toSet());
-
-        PacketHandler handler;
-        for (Connection addr : out) {
-            LOG.logger.info("Removing packet handler for " + addr);
-            lastPackets.remove(addr);
-            handler = handlers.remove(addr);
-
-            if (handler != null) {
-                handler.dispose();
-            }
+    public synchronized PacketHandler handleConnection(Socket socket) {
+        if(!handlers.containsKey(socket)) {
+        	PacketHandler handler = new PacketHandler(server, socket);
+        	handlers.put(socket, handler);
+        	handler.start();
         }
-        return out;
+        return handlers.get(socket);
     }
 
-    public synchronized void dispatch(Packet packet) {
-        lastPackets.put(packet.getConnection(), System.currentTimeMillis());
-        handlers.computeIfAbsent(
-                        packet.getConnection(), $ -> new PacketHandler(server, packet.getConnection()))
-                .dispatch(packet);
+    public void disconnectAll(InetAddress address) {
+    	Set<Socket> sockets = new HashSet<>();
+    	for(Socket socket : handlers.keySet()) {
+    		if(socket.getInetAddress().equals(address)) {
+    			sockets.add(socket);
+    		}
+    	}
+    	for(Socket socket : sockets) {
+    		server.getSessionManager().releasePlayer(socket.getRemoteSocketAddress());
+    		handlers.remove(socket);
+    		try {
+    			socket.close();
+    		}
+    		catch(IOException e) {
+    			LOG.logException(e);
+    		}
+    	}
     }
 
-    public void disconnectAll(Connection address) {
-        server.getSessionManager().releasePlayer(address);
-        lastPackets.remove(address);
-        handlers.remove(address);
-    }
-
-    public List<Connection> getConnectedAddresses() {
+    public List<Socket> getConnectedSockets() {
         return new ArrayList<>(handlers.keySet());
     }
 }

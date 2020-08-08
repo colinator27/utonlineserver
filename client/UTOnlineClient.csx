@@ -38,13 +38,16 @@ port = -1;
 
 playerId = -1;
 
+otherPlayers = -1;
+
 state = 0; // 0 = logging in, 1 = logged in, -1 = kicked
 connected = false;
 disconnectTimer = 0;
 ", Data);
 
 obj_uto_client.EventHandlerFor(EventType.Other, EventSubtypeOther.GameEnd, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
-ds_map_destroy(otherPlayers);
+if (otherPlayers != -1)
+	ds_map_destroy(otherPlayers);
 ", Data);
 
 obj_uto_client.EventHandlerFor(EventType.Step, EventSubtypeStep.EndStep, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
@@ -129,7 +132,7 @@ if (state == 1)
 } else if (state == 0 && connected)
 {
 	disconnectTimer++;
-	if (disconnectTimer >= 4*room_speed)
+	if (disconnectTimer >= 8*room_speed)
 	{
 		state = -1;
 		disconnectTimer = 0;
@@ -172,35 +175,44 @@ if (port == -1)
 	network_set_config(network_config_connect_timeout, 4000);
 	network_set_config(network_config_use_non_blocking_socket, 1);
 
-	var buff = buffer_create(1, buffer_fixed, 1);
-
-	socket = network_create_socket(network_socket_udp);
-
-	send_packet(1, buff); // login
-
-	buffer_delete(buff);
-
-	uuid = array_create(16, 0);
-
-	updatePacketTimer = 0;
-	prevRoom = 0;
-	prevX = 0;
-	prevY = 0;
-	prevSpr = spr_maincharad;
-	prevSprInd = 0;
-
-	otherPlayers = ds_map_create();
+	socket = network_create_socket(network_socket_tcp);
+	network_connect_raw(socket, ip, port);
 
 	connected = true;
 	disconnectTimer = 0;
-	
-	alarm[0] = 2*room_speed;
 }
 ", Data);
 
 obj_uto_client.EventHandlerFor(EventType.Other, EventSubtypeOther.AsyncNetworking, Data.Strings, Data.Code, Data.CodeLocals).AppendGML(@"
 switch (ds_map_find_value(async_load, ""type""))
 {
+	case network_type_non_blocking_connect:
+		var buff = buffer_create(1, buffer_fixed, 1);
+		send_packet(1, buff); // login
+
+		buffer_delete(buff);
+
+		uuid = array_create(16, 0);
+
+		updatePacketTimer = 0;
+		prevRoom = 0;
+		prevX = 0;
+		prevY = 0;
+		prevSpr = spr_maincharad;
+		prevSprInd = 0;
+
+		otherPlayers = ds_map_create();
+	
+		alarm[0] = room_speed;
+		break;
+	case network_type_disconnect:		
+		state = -1;
+		disconnectTimer = 0;
+		connected = false;
+		show_message_async(""Disconnected!"");
+		playerId = -1;
+		ds_map_clear(otherPlayers);
+		break;
 	case network_type_data:
 		if (ds_map_find_value(async_load, ""id"") == socket)
 		{
@@ -290,7 +302,7 @@ buffer_write(b, buffer_u8, ord(""O""));
 buffer_write(b, buffer_u8, 0);
 buffer_write(b, buffer_u8, argument0);
 buffer_copy(argument1, 0, srcSize, b, 5);
-network_send_udp_raw(obj_uto_client.socket, obj_uto_client.ip, obj_uto_client.port, b, s);
+network_send_raw(obj_uto_client.socket, b, s);
 buffer_delete(b);
 ", Data);
 

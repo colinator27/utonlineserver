@@ -2,8 +2,8 @@ package me.colinator27;
 
 import me.colinator27.packet.*;
 
-import java.net.DatagramPacket;
-import java.net.DatagramSocket;
+import java.net.ServerSocket;
+import java.net.Socket;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
@@ -20,7 +20,7 @@ public class GameServer {
     private ConnectionManager connectionManager;
     private SessionManager sessionManager;
 
-    private DatagramSocket socket;
+    private ServerSocket socket;
 
     private ExecutorService executor;
     private Future<?> future;
@@ -41,7 +41,7 @@ public class GameServer {
         LOG.logger.info("Server opening on port " + properties.port);
         LOG.instantiateLogger();
         try {
-            this.socket = new DatagramSocket(properties.port);
+            this.socket = new ServerSocket(properties.port);
         } catch (Exception e) {
             LOG.logException(e);
             return;
@@ -66,7 +66,7 @@ public class GameServer {
     }
 
     public void addPlayerToRoom(GamePlayer player, int room) {
-        if (this.isValidRoom(room)) {
+        if (this.isValidRoom(room) && player.room != room) {
             long now = System.currentTimeMillis();
 
             if (player.lastRoomChangeTime != -1 && now - player.lastRoomChangeTime < properties.minRoomChange) {
@@ -96,7 +96,7 @@ public class GameServer {
                             .addShort((short) list.size());
 
             for (GamePlayer other : list) {
-                this.sendPacket(other.connection, packet);
+                other.handler.sendPacket(packet);
 
                 packet2.addInt(other.id)
                         .addShort((short) other.spriteIndex)
@@ -104,7 +104,7 @@ public class GameServer {
                         .addFloat(other.x)
                         .addFloat(other.y);
             }
-            this.sendPacket(player.connection, packet2);
+            player.handler.sendPacket(packet2);
             list.add(player);
         }
     }
@@ -119,7 +119,7 @@ public class GameServer {
                             .addInt(room)
                             .addInt(player.id);
 
-            for (GamePlayer other : list) this.sendPacket(other.connection, packet);
+            for (GamePlayer other : list) other.handler.sendPacket(packet);
             player.room = -1;
         }
     }
@@ -143,12 +143,8 @@ public class GameServer {
         if (properties.verifyVisuals) {
             if (player.spriteIndex < 1088 || (player.spriteIndex > 1139 && (player.spriteIndex < 2373 || (player.spriteIndex > 2376 && player.spriteIndex != 2517)))
                 || player.imageIndex < 0 || player.imageIndex > 10) {
-                LOG.logger.info(
-                        "Player ID "
-                                + player.id
-                                + " from "
-                                + player.connection.toString()
-                                + " kicked for invalid visuals ("
+                LOG.logger.info(player 
+                				+ " kicked for invalid visuals ("
                                 + player.spriteIndex
                                 + ","
                                 + player.imageIndex
@@ -157,25 +153,23 @@ public class GameServer {
                 return false;
             }
         }
+        
+        if(Float.isNaN(x) || Float.isNaN(y) || Float.isInfinite(x) || Float.isInfinite(y)) {
+        	LOG.logger.info(player + " kicked for invalid coordinates");
+        	sessionManager.kick(player, "Invalid coordinates: (" + x + ", " + y + ")");
+        	return false;
+        }
 
         long now = System.currentTimeMillis();
         if (player.lastMovePacketTime != -1) {
             float elapsedFrames = ((now - player.lastMovePacketTime) / 1000f) * 30f;
             if (Math.abs(x - player.x) > elapsedFrames * 5f || Math.abs(y - player.y) > elapsedFrames * 5f) {
                 if (properties.kickInvalidMovement) {
-                    LOG.logger.info(
-                            "Player "
-                                    + player.id
-                                    + " ("
-                                    + player.uuid
-                                    + ") from "
-                                    + player.connection.toString()
-                                    + " kicked for invalid movement");
+                    LOG.logger.info(player + " kicked for invalid movement");
                     sessionManager.kick(player, "Kicked for invalid movement (may be a bug)");
                     return false;
                 } else {
-                    this.sendPacket(
-                            player.connection,
+                    player.handler.sendPacket(
                             new PacketBuilder(OutboundPacketType.FORCE_TELEPORT)
                                     .addFloat(player.x)
                                     .addFloat(player.y));
@@ -192,23 +186,6 @@ public class GameServer {
         return true;
     }
 
-    public void sendPacket(Connection connection, PacketBuilder packet) {
-        this.sendPacket(new Packet(connection, packet.send, packet.getSize()));
-    }
-
-    public boolean sendPacket(Packet packet) {
-        try {
-            // LOG.logger.info(String.format("Send: %s:%s -> %s", packet.getAddress(),
-            // packet.getPort(),
-            // Util.stringify(packet.getData(), packet.getLength())));
-            socket.send(packet.getRawPacket());
-        } catch (Exception e) {
-            LOG.logException(e);
-            return false;
-        }
-        return true;
-    }
-
     public Future<?> start() {
         return future = executor.submit(this::run);
     }
@@ -219,7 +196,6 @@ public class GameServer {
             sessionManager
                     .getPlayers()
                     .forEach(player -> sessionManager.kick(player, "Server halted"));
-            connectionManager.getConnectedAddresses().forEach(connectionManager::disconnectAll);
         }
     }
 
@@ -228,20 +204,12 @@ public class GameServer {
     }
 
     private void run() {
-        DatagramPacket packet;
-
+    	Socket socket;
         while (true) {
             try {
-                packet = new DatagramPacket(new byte[4096], 4096);
-                socket.receive(packet);
-
-                connectionManager.cleanup().forEach(sessionManager::releasePlayer);
-                sessionManager.cleanup();
-
-                // LOG.logger.info(String.format("Recv: %s:%s -> %s", packet.getAddress(),
-                // packet.getPort(),
-                // Util.stringify(packet.getData(), packet.getLength())));
-                connectionManager.dispatch(new Packet(packet));
+                socket = this.socket.accept();
+                socket.setSoTimeout(4000);
+                connectionManager.handleConnection(socket);
             } catch (Throwable e) {
                 LOG.logException(e);
             }

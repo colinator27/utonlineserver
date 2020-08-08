@@ -43,6 +43,9 @@ public class Main {
 
         // Minimum time (in ms) between room changes
         properties.setProperty("min-room-change", "200");
+        
+        // Log packet data
+        properties.setProperty("debug-mode", "false");
 
         // Whether to verify visuals (sprites, etc., excluding movement)
         properties.setProperty("verify-visuals", "true");
@@ -126,6 +129,11 @@ public class Main {
                         .map(Integer::parseInt)
                         .collect(Collectors.toList());
         assert minRoomChanges.size() == count;
+        List<Boolean> debugMode =
+                Arrays.stream(properties.getProperty("debug-mode").split(","))
+                        .map(Boolean::parseBoolean)
+                        .collect(Collectors.toList());
+        assert debugMode.size() == count;
         List<Boolean> verifyVisuals =
                 Arrays.stream(properties.getProperty("verify-visuals").split(","))
                         .map(Boolean::parseBoolean)
@@ -149,6 +157,8 @@ public class Main {
                                     maxPlayers.get(i),
                                     maxRoomIDs.get(i),
                                     minRoomChanges.get(i),
+                                    
+                                    debugMode.get(i),
                                     verifyVisuals.get(i),
                                     kickInvalidMovement.get(i),
                                     disallowSameIP.get(i))));
